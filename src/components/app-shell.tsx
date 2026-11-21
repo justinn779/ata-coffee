@@ -58,7 +58,7 @@ const NAV: Array<{ group: string; items: Array<{ href: string; label: string; ic
       { href: "/series", label: "品牌系列與履歷", icon: Sparkles },
     ],
   },
-  { group: "系統", items: [{ href: "/settings", label: "系統設定", icon: Settings }] },
+  { group: "系統", items: [{ href: "/settings/", label: "系統設定", icon: Settings }] },
 ];
 
 export function AppShell({ user, logout, children }: { user: { name: string; email: string }; logout: () => Promise<void>; children: ReactNode }) {
@@ -118,7 +118,7 @@ export function AppShell({ user, logout, children }: { user: { name: string; ema
   const footer = (compact: boolean) => (
     <div className={cn("flex items-center gap-2 border-t border-border p-3", compact && "flex-col")}>
       {!compact && (
-        <Link href="/settings/account" className="min-w-0 flex-1 rounded-lg px-2 py-1 hover:bg-surface-2">
+        <Link href="/settings/?s=account" className="min-w-0 flex-1 rounded-lg px-2 py-1 hover:bg-surface-2">
           <p className="truncate text-sm font-medium">{user.name}</p>
           <p className="truncate text-xs text-muted">{user.email}</p>
         </Link>

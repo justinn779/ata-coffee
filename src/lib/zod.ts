@@ -72,3 +72,9 @@ export const boolStr = () => z.preprocess((v) => v === true || v === "true", z.b
 export const optEmail = () => z.preprocess((v) => v || null, z.string().email("Email 格式錯誤").nullable());
 export const nativeEnumOf = <T extends z.EnumLike>(e: T, label: string) => z.nativeEnum(e, { errorMap: () => ({ message: `請選擇${label}` }) });
 export const enumList = <T extends string>(vals: readonly [T, ...T[]], label: string) => z.enum(vals as [T, ...T[]], { errorMap: () => ({ message: `請選擇${label}` }) });
+/** Firestore 版：日期時間轉為 ISO 字串、日期轉為 'YYYY-MM-DD' */
+export const isoDateTime = (label: string) => reqDateTime(label).transform((d) => d.toISOString());
+export const isoDate = (label: string) => reqDate(label).transform((d) => d.toISOString().slice(0, 10));
+export const optIsoDate = () => optDate().transform((d) => (d ? d.toISOString().slice(0, 10) : null));
+export const docId = (label: string) => z.string({ required_error: `請選擇${label}` }).min(1, `請選擇${label}`).max(200);
+export const optDocId = () => z.preprocess((v) => (v === "" || v == null ? null : v), z.string().max(200).nullable());

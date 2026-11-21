@@ -1,0 +1,30 @@
+rules_version = '2';
+// ATA Coffee — Cloud Storage 安全規則：只有管理員可上傳／讀取；限制檔案類型與大小。
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+    // 曲線原始檔：只能上傳到自己的資料夾；.csv/.txt/.alog；5MB 內；上傳後不可覆寫或刪除（保存原始檔）
+    match /uploads/{uid}/{fileName} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.auth.uid == uid
+        && fileName.matches('^[0-9a-f-]{36}[.](csv|txt|alog)$')
+        && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024
+        && (request.resource.contentType.matches('text/.*') || request.resource.contentType == 'application/octet-stream' || request.resource.contentType == 'application/vnd.ms-excel');
+      allow update, delete: if false;
+    }
+    // 品牌素材：JPG/PNG/WebP，5MB 內
+    match /brand/{fileName} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && fileName.matches('^[0-9a-f-]{36}[.](jpg|jpeg|png|webp)$')
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow update, delete: if false;
+    }
+    match /{all=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,13 +1,18 @@
+"use client";
+
 import { EntityForm } from "@/components/entity-form";
 import { opts, RESEARCH_STATUS } from "@/lib/labels";
-import { saveProject } from "./actions";
+import { opAction } from "@/lib/api";
+import type { Row } from "@/lib/data";
+import { formDefaults } from "@/lib/page";
 
-export function ProjectForm({ initial }: { initial?: Record<string, unknown> }) {
-  const d = Object.fromEntries(Object.entries(initial ?? {}).map(([k, v]) => [k, v instanceof Date ? v.toISOString().slice(0, 10) : v == null ? "" : String(v)]));
+const KEYS = ["id", "name", "status", "startDate", "hypothesis", "objective", "controlledVariables", "independentVariables", "result", "conclusion", "nextSteps"];
+
+export function ProjectForm({ initial }: { initial?: Row }) {
   return (
     <EntityForm
       draftKey={initial ? undefined : "research-new"}
-      defaultValues={{ status: "PLANNING", ...d }}
+      defaultValues={{ status: "PLANNING", ...formDefaults(initial, KEYS) }}
       submitLabel={initial ? "儲存" : "建立專案"}
       sections={[
         { key: "a", title: "研究設計" },
@@ -26,7 +31,7 @@ export function ProjectForm({ initial }: { initial?: Record<string, unknown> }) 
         { name: "conclusion", label: "結論", type: "textarea", section: "b", wide: true },
         { name: "nextSteps", label: "下次改善方向", type: "textarea", section: "b", wide: true },
       ]}
-      action={saveProject}
+      action={opAction("research.save", undefined, (d) => `/research/view/?id=${d.id}`)}
     />
   );
 }

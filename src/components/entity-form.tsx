@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useFieldArray, useForm, type Control, type UseFormRegister, type FieldErrors } from "react-hook-form";
-import type { ActionResult } from "@/server/action";
+import type { ActionResult } from "@/lib/action-result";
 import { toast } from "./toast";
 import { Button, cn } from "./ui";
 

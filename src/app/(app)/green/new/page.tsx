@@ -1,26 +1,25 @@
-import { prisma } from "@/lib/db";
+"use client";
+
 import { nowTaipeiLocal, todayTaipei } from "@/lib/time";
+import { opAction } from "@/lib/api";
+import { useCol } from "@/lib/data";
+import { useCoffeeOptions, useQS } from "@/lib/page";
 import { EntityForm } from "@/components/entity-form";
 import { Notice, PageHeader } from "@/components/ui";
-import { receiveGreen } from "../../coffees/actions";
-import { coffeeOptions } from "@/server/options";
 
-export const metadata = { title: "新增生豆採購" };
-
-export default async function NewGreenPage({ searchParams }: { searchParams: Promise<{ coffee?: string }> }) {
-  const { coffee } = await searchParams;
-  const [coffees, suppliers, locations] = await Promise.all([
-    coffeeOptions(),
-    prisma.supplier.findMany({ where: { isActive: true } }),
-    prisma.inventoryLocation.findMany(),
-  ]);
+export default function NewGreenPage() {
+  const coffee = useQS("coffee");
+  const coffees = useCoffeeOptions();
+  const suppliers = useCol("suppliers", [], "code", false);
+  const locations = useCol("locations", [], "code", false);
   return (
     <>
-      <PageHeader title="新增生豆採購" description="入庫時建立生豆批次與入庫帳；每克成本 = (採購重量 × 每公斤單價 + 運費 + 其他) ÷ 實際入庫重量" back={{ href: "/green", label: "生豆採購批次" }} />
+      <PageHeader title="新增生豆採購" description="入庫時建立生豆批次與入庫帳；每克成本 = (採購重量 × 每公斤單價 + 運費 + 其他) ÷ 實際入庫重量" back={{ href: "/green/", label: "生豆採購批次" }} />
       {coffees.length === 0 ? (
         <Notice tone="warning">請先建立咖啡豆主檔。</Notice>
       ) : (
         <EntityForm
+          key={`${coffees.length}-${suppliers.data.length}-${locations.data.length}`}
           draftKey="green-new"
           submitLabel="入庫"
           successMessage="生豆已入庫"
@@ -32,7 +31,7 @@ export default async function NewGreenPage({ searchParams }: { searchParams: Pro
           defaultValues={{ coffeeId: coffee ?? "", purchaseDate: todayTaipei(), receivedAt: nowTaipeiLocal(), shippingCost: "0", otherCost: "0" }}
           fields={[
             { name: "coffeeId", label: "咖啡豆", type: "select", required: true, options: coffees, section: "a" },
-            { name: "supplierId", label: "供應商", type: "select", options: suppliers.map((s) => ({ value: s.id, label: s.name })), section: "a" },
+            { name: "supplierId", label: "供應商", type: "select", options: suppliers.data.map((s) => ({ value: s.id, label: s.name })), section: "a" },
             { name: "purchaseDate", label: "採購日期", type: "date", required: true, section: "a" },
             { name: "receivedAt", label: "入庫時間", type: "datetime", required: true, section: "a" },
             { name: "invoiceNo", label: "發票／單據號碼", section: "a" },
@@ -45,10 +44,10 @@ export default async function NewGreenPage({ searchParams }: { searchParams: Pro
             { name: "moisturePercent", label: "含水率", type: "number", unit: "%", section: "c" },
             { name: "densityGPerL", label: "密度", type: "number", unit: "g/L", section: "c" },
             { name: "waterActivity", label: "水活性（選填）", type: "number", unit: "aw", section: "c" },
-            { name: "locationId", label: "儲存位置", type: "select", options: locations.map((l) => ({ value: l.id, label: l.name })), section: "c" },
+            { name: "locationId", label: "儲存位置", type: "select", options: locations.data.map((l) => ({ value: l.id, label: l.name })), section: "c" },
             { name: "note", label: "備註", type: "textarea", wide: true, section: "c" },
           ]}
-          action={receiveGreen}
+          action={opAction("green.receive", undefined, (d) => `/inventory/lot/?id=${d.lotId}`)}
         />
       )}
     </>

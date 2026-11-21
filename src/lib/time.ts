@@ -69,3 +69,6 @@ export function monthRangeTaipei(ym: string): { start: Date; end: Date } {
   };
 }
 export const currentMonthTaipei = () => format(inTz(new Date()), "yyyy-MM");
+
+/** 臺北日期 + N 天 → 'YYYY-MM-DD'（Firestore 版日期欄位） */
+export const addDaysYmd = (base: Date, days: number) => addDaysDateOnly(base, days).toISOString().slice(0, 10);

@@ -1,19 +1,23 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
-import { config } from "dotenv";
 
-// 測試一律使用 .env.test（獨立的 ata_test 資料庫），絕不連線開發或正式資料庫
-const testEnv = config({ path: ".env.test", override: true }).parsed ?? {};
-
+/**
+ * 測試在 Firebase 模擬器上執行（專案 demo-ata-coffee，完全離線、不連線正式環境）：
+ *   npm test   → firebase emulators:exec --only firestore,auth,storage "vitest run"
+ */
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   test: {
     environment: "node",
-    include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
-    env: testEnv,
-    globalSetup: ["tests/global-setup.ts"],
+    include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts", "tests/rules/**/*.test.ts"],
+    env: {
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+      FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099",
+      FIREBASE_STORAGE_EMULATOR_HOST: "127.0.0.1:9199",
+      GCLOUD_PROJECT: "demo-ata-coffee",
+    },
     fileParallelism: false,
     testTimeout: 60_000,
-    hookTimeout: 120_000,
+    hookTimeout: 60_000,
   },
 });

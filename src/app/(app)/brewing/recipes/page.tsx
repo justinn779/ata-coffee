@@ -1,39 +1,39 @@
-import { prisma } from "@/lib/db";
+"use client";
+
 import { fmtNum } from "@/lib/decimal";
 import { fmtDate, fmtSec } from "@/lib/time";
+import { opAction } from "@/lib/api";
+import { useCol } from "@/lib/data";
 import { ActionDialog } from "@/components/action-dialog";
-import { Badge, LinkButton, PageHeader, SimpleTable, Tabs, Card, A } from "@/components/ui";
-import { toggleRecipeRecommended } from "../actions";
+import { A, Badge, Card, LinkButton, PageHeader, SimpleTable, Tabs } from "@/components/ui";
 
-export const metadata = { title: "手沖配方" };
-
-export default async function RecipesPage() {
-  const recipes = await prisma.brewRecipe.findMany({ orderBy: [{ name: "asc" }, { version: "desc" }], include: { coffee: true, dripper: true, _count: { select: { sessions: true } } } });
+export default function RecipesPage() {
+  const r = useCol("brewRecipes", [], "name", false);
+  const sessions = useCol("brewSessions");
+  const list = [...r.data].sort((a, b) => a.name.localeCompare(b.name) || b.version - a.version);
   return (
     <>
-      <PageHeader title="手沖實驗室" description="配方版本：於沖煮紀錄頁「存為配方」建立；同名配方自動遞增版本" actions={<LinkButton href="/brewing/new">＋ 新增手沖</LinkButton>} />
-      <Tabs active="recipes" tabs={[{ key: "sessions", label: "沖煮紀錄", href: "/brewing" }, { key: "recipes", label: "配方", href: "/brewing/recipes", count: recipes.length }]} />
+      <PageHeader title="手沖實驗室" description="配方版本：於沖煮紀錄頁「存為配方」建立；同名配方自動遞增版本" actions={<LinkButton href="/brewing/new/">＋ 新增手沖</LinkButton>} />
+      <Tabs active="recipes" tabs={[{ key: "sessions", label: "沖煮紀錄", href: "/brewing/" }, { key: "recipes", label: "配方", href: "/brewing/recipes/", count: list.length }]} />
       <Card>
         <SimpleTable
           head={["配方", "版本", "咖啡豆", "粉／水", "水溫", "時間", "濾杯", "使用次數", "建立", ""]}
-          rows={recipes.map((r) => [
-            <span key="n">
-              {r.name} {r.isRecommended && <Badge tone="sage">推薦</Badge>}
-            </span>,
-            `v${r.version}`,
-            r.coffee?.nameZh ?? "—",
-            `${fmtNum(r.doseG, 1)}g／${fmtNum(r.waterG, 0)}g`,
-            r.waterTempC ? `${r.waterTempC}°C` : "—",
-            fmtSec(r.totalTimeSec),
-            r.dripper?.name ?? "—",
-            r._count.sessions,
-            fmtDate(r.createdAt),
+          rows={list.map((x) => [
+            <span key="n">{x.name} {x.isRecommended && <Badge tone="sage">推薦</Badge>}</span>,
+            `v${x.version}`,
+            x.coffeeName ?? "—",
+            `${fmtNum(x.doseG, 1)}g／${fmtNum(x.waterG, 0)}g`,
+            x.waterTempC ? `${x.waterTempC}°C` : "—",
+            fmtSec(x.totalTimeSec),
+            x.dripperName ?? "—",
+            sessions.data.filter((s) => s.recipeId === x.id).length,
+            fmtDate(x.createdAt),
             <span key="a" className="flex gap-2">
-              <A href={`/brewing/new?recipe=${r.id}`}>使用</A>
-              <ActionDialog label={r.isRecommended ? "取消推薦" : "推薦"} size="sm" variant="ghost" title="切換推薦配方？" payload={{ id: r.id }} action={toggleRecipeRecommended} />
+              <A href={`/brewing/new/?recipe=${x.id}`}>使用</A>
+              <ActionDialog label={x.isRecommended ? "取消推薦" : "推薦"} size="sm" variant="ghost" title="切換推薦配方？" payload={{ id: x.id }} action={opAction("recipe.toggleRecommended")} />
             </span>,
           ])}
-          empty="尚無配方"
+          empty={r.loading ? "載入中…" : "尚無配方"}
         />
       </Card>
     </>

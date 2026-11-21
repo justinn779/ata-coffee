@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computePhases, weightLoss, freshnessOf } from "@/server/domain/roasting";
-import { greenCostPerG } from "@/server/domain/green";
+import { computePhases, weightLoss, freshnessOf } from "../../functions/src/domain/roasting";
+import { greenCostPerG } from "../../functions/src/domain/green";
 import { parseMmSs, restDays, parseTaipeiLocal, monthRangeTaipei } from "@/lib/time";
 import { D, percent } from "@/lib/decimal";
-import { parsePythonLiteral, withComputedRor, detectMapping, parseCsvCurve, CurveParseError } from "@/server/curves/parse";
+import { parsePythonLiteral, withComputedRor, detectMapping, parseCsvCurve, CurveParseError } from "../../functions/src/curves/parse";
 
 describe("烘焙計算", () => {
   it("失重率 = (投入 − 產出) ÷ 投入 × 100%", () => {
@@ -27,7 +27,7 @@ describe("烘焙計算", () => {
     expect(() => computePhases({ firstCrackStartSec: 500, dropSec: 400 })).toThrow(/一爆/);
   });
   it("賞味設定：批次覆寫優先於咖啡豆預設", () => {
-    const f = freshnessOf({ roastedAt: new Date(), restStartDays: null, peakFromDays: 10, peakToDays: null, shelfLifeDays: null }, { restStartDays: 5, peakFromDays: 7, peakToDays: 30, shelfLifeDays: 180 });
+    const f = freshnessOf({ restStartDays: null, peakFromDays: 10, peakToDays: null, shelfLifeDays: null }, { restStartDays: 5, peakFromDays: 7, peakToDays: 30, shelfLifeDays: 180 });
     expect(f.peakFrom).toEqual({ value: 10, source: "批次覆寫" });
     expect(f.peakTo).toEqual({ value: 30, source: "咖啡豆預設" });
     expect(f.restStart?.source).toBe("咖啡豆預設");

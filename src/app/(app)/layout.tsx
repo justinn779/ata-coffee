@@ -1,14 +1,23 @@
+"use client";
+
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
-import { requireUser } from "@/server/auth";
-import { logoutAction } from "../login/actions";
+import { AuthGate, logout, useAuth } from "@/components/auth";
+import { Loading } from "@/lib/page";
 
-export const dynamic = "force-dynamic";
-
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
+function Shell({ children }: { children: React.ReactNode }) {
+  const { admin, user } = useAuth();
   return (
-    <AppShell user={{ name: user.name, email: user.email }} logout={logoutAction}>
-      {children}
+    <AppShell user={{ name: admin?.name ?? "管理員", email: user?.email ?? "" }} logout={async () => { await logout(); }}>
+      <Suspense fallback={<Loading />}>{children}</Suspense>
     </AppShell>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthGate>
+      <Shell>{children}</Shell>
+    </AuthGate>
   );
 }

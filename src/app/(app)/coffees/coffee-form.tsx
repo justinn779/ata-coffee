@@ -1,15 +1,19 @@
-import { EntityForm, type FieldDef } from "@/components/entity-form";
-import { prisma } from "@/lib/db";
-import { saveCoffee } from "./actions";
+"use client";
 
-export async function CoffeeForm({ initial }: { initial?: Record<string, unknown> }) {
-  const suppliers = await prisma.supplier.findMany({ where: { isActive: true }, orderBy: { code: "asc" } });
+import { EntityForm, type FieldDef } from "@/components/entity-form";
+import { opAction } from "@/lib/api";
+import { useCol, type Row } from "@/lib/data";
+import { formDefaults } from "@/lib/page";
+
+export function CoffeeForm({ initial }: { initial?: Row }) {
+  const suppliers = useCol("suppliers", [], "code", false);
   const fields: FieldDef[] = [
+    { name: "id", label: "", type: "hidden" },
     { name: "code", label: "代碼", required: true, placeholder: "例：ETH-YRG-W", section: "basic" },
     { name: "nameZh", label: "中文名稱", required: true, section: "basic" },
     { name: "nameEn", label: "英文名稱", section: "basic" },
     { name: "brandName", label: "品牌商品名稱", section: "basic" },
-    { name: "supplierId", label: "供應商", type: "select", options: suppliers.map((s) => ({ value: s.id, label: s.name })), section: "basic" },
+    { name: "supplierId", label: "供應商", type: "select", options: suppliers.data.map((s) => ({ value: s.id, label: s.name })), section: "basic" },
     { name: "grade", label: "生豆等級", section: "basic" },
     { name: "country", label: "產國", section: "origin" },
     { name: "region", label: "產區", section: "origin" },
@@ -25,21 +29,21 @@ export async function CoffeeForm({ initial }: { initial?: Record<string, unknown
     { name: "shelfLifeDays", label: "預設保存期限（自烘焙日）", type: "number", unit: "天", hint: "依實際食品標示與營運規則設定", section: "fresh" },
     { name: "freshnessNote", label: "賞味備註", type: "textarea", wide: true, section: "fresh" },
     { name: "note", label: "備註", type: "textarea", wide: true, section: "fresh" },
-    { name: "id", label: "", type: "hidden" },
   ];
-  const defaults = Object.fromEntries(Object.entries(initial ?? {}).map(([k, v]) => [k, v == null ? "" : String(v)]));
+  const keys = fields.map((f) => f.name);
   return (
     <EntityForm
+      key={suppliers.loading ? "l" : "r"}
       fields={fields}
       sections={[
         { key: "basic", title: "基本資料" },
         { key: "origin", title: "產地與處理" },
         { key: "fresh", title: "養豆與賞味", description: "最佳風味區間不等於商品有效日期；烘焙批次可覆寫這些預設值" },
       ]}
-      defaultValues={defaults}
-      action={saveCoffee}
-      draftKey={initial?.id ? undefined : "coffee-new"}
-      submitLabel={initial?.id ? "儲存變更" : "建立咖啡豆"}
+      defaultValues={formDefaults(initial, keys)}
+      action={opAction("coffee.save", undefined, (d) => `/coffees/view/?id=${d.id}`)}
+      draftKey={initial ? undefined : "coffee-new"}
+      submitLabel={initial ? "儲存變更" : "建立咖啡豆"}
     />
   );
 }
