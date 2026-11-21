@@ -14,9 +14,10 @@ permissions:
   pages: write
   id-token: write
 
+# 同一分支／PR 的新推送會取消舊的測試；部署另用 pages 群組排隊（不取消進行中的部署）
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -45,6 +46,9 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
