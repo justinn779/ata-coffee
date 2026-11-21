@@ -13,6 +13,17 @@ import { StatusBadge } from "@/components/status";
 import { A, Badge, Card, CardBody, CardHeader, KV, Notice, PageHeader, SimpleTable } from "@/components/ui";
 import { ProjectForm } from "../project-form";
 
+type Opt = { value: string; label: string };
+/** 實驗版本欄位（新增與修改共用） */
+const expFields = (roastOpts: Opt[], e?: Row) => [
+  { name: "label", label: "實驗名稱", required: true, defaultValue: e?.label },
+  { name: "experimentDate", label: "實驗日期", type: "date" as const, required: true, defaultValue: e?.experimentDate ?? todayTaipei() },
+  { name: "isBaseline", label: "是否為基準組", type: "select" as const, options: [{ value: "false", label: "否" }, { value: "true", label: "是（基準組）" }], defaultValue: e?.isBaseline ? "true" : "false" },
+  { name: "variableValues", label: "變因數值（每行 名稱:值）", type: "textarea" as const, hint: "例：DTR:18%", defaultValue: e ? Object.entries((e.variableValues as Record<string, string>) ?? {}).map(([k, v]) => `${k}:${v}`).join("\n") : undefined },
+  { name: "roastBatchId", label: "關聯烘焙批次（含其杯測、沖煮）", type: "select" as const, options: [{ value: "", label: "（無）" }, ...roastOpts], defaultValue: e?.roastBatchId ?? "" },
+  { name: "observation", label: "主觀觀察", type: "textarea" as const, defaultValue: e?.observation ?? undefined },
+];
+
 function stats(xs: number[]) {
   if (!xs.length) return null;
   const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -60,16 +71,10 @@ export default function ResearchDetail() {
                     label="＋ 新增實驗版本"
                     title="新增實驗版本"
                     payload={{ projectId: x.id }}
-                    fields={[
-                      { name: "label", label: "實驗名稱", required: true },
-                      { name: "experimentDate", label: "實驗日期", type: "date", required: true, defaultValue: todayTaipei() },
-                      { name: "isBaseline", label: "是否為基準組", type: "select", options: [{ value: "false", label: "否" }, { value: "true", label: "是（基準組）" }] },
-                      { name: "variableValues", label: "變因數值（每行 名稱:值）", type: "textarea", hint: "例：DTR:18%" },
-                      { name: "roastBatchId", label: "關聯烘焙批次（含其杯測、沖煮）", type: "select", options: [{ value: "", label: "（無）" }, ...roastOpts] },
-                      { name: "observation", label: "主觀觀察", type: "textarea" },
-                    ]}
+                    fields={expFields(roastOpts)}
                     action={opAction("research.addExperiment")}
                   />
+                  <ActionDialog label="刪除專案" variant="danger" title={`刪除研究專案「${x.name}」？`} description="專案與其所有實驗版本將一併刪除；關聯的烘焙、杯測、沖煮紀錄不受影響。刪除後無法復原（操作紀錄會保留）。" confirmLabel="確認刪除" payload={{ id: x.id }} action={opAction("research.delete")} redirectTo="/research/" />
                 </>
               }
             />
@@ -101,7 +106,11 @@ export default function ResearchDetail() {
                       rb ? fmtPct(rb.dtrPercent) : "—",
                       cup ? `${cup.n} / ${fmtNum(cup.mean, 2)} / ${cup.sd == null ? "—" : fmtNum(cup.sd, 2)}` : "無資料",
                       brew ? `${brew.n} / ${fmtNum(brew.mean, 2)}` : "無資料",
-                      e.isBaseline ? "" : <ActionDialog key="b" label="設為基準" size="sm" variant="ghost" title="設為基準組？" payload={{ projectId: x.id, expId: e.id }} action={opAction("research.setBaseline")} />,
+                      <span key="a" className="flex flex-wrap gap-1">
+                        {!e.isBaseline && <ActionDialog label="設為基準" size="sm" variant="ghost" title="設為基準組？" payload={{ projectId: x.id, expId: e.id }} action={opAction("research.setBaseline")} />}
+                        <ActionDialog label="修改" size="sm" variant="ghost" title={`修改實驗 v${e.version}`} payload={{ projectId: x.id, expId: e.id }} fields={expFields(roastOpts, e)} action={opAction("research.updateExperiment")} />
+                        <ActionDialog label="刪除" size="sm" variant="ghost" title={`刪除實驗 v${e.version}「${e.label}」？`} description="只刪除此實驗版本，關聯的烘焙批次與杯測、沖煮紀錄不受影響。" confirmLabel="確認刪除" payload={{ projectId: x.id, expId: e.id }} action={opAction("research.deleteExperiment")} />
+                      </span>,
                     ])}
                     empty="尚無實驗"
                   />

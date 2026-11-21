@@ -1,6 +1,6 @@
 "use client";
 
-import { fmtSec, nowTaipeiLocal } from "@/lib/time";
+import { fmtSec, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument, type Row } from "@/lib/data";
 import { Guard, useEquipmentOptions, useQS, useRoastBatchOptions } from "@/lib/page";
@@ -9,9 +9,11 @@ import { PageHeader } from "@/components/ui";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
 
+/** 新增手沖；?copy= 複製參數；?edit=<id> 修改（烘焙批次不可變更） */
 export default function NewBrewPage() {
   const roast = useQS("roast");
-  const copy = useQS("copy");
+  const editId = useQS("edit");
+  const copy = useQS("copy") ?? editId;
   const rid = useQS("recipe");
   const roasts = useRoastBatchOptions();
   const grinders = useEquipmentOptions("GRINDER");
@@ -20,15 +22,17 @@ export default function NewBrewPage() {
   const recipes = useCol("brewRecipes", [], "name", false);
   const src = useDocument("brewSessions", copy);
   const recipe = useDocument("brewRecipes", rid);
+  const legacy = useCol(editId && src.data && src.data.stockTxId === undefined ? "invTxs" : null, [["note", `手沖試喝 ${(editId ?? "").slice(0, 8)}`]]);
   return (
-    <Guard loading={(!!copy && src.loading) || (!!rid && recipe.loading)}>
+    <Guard loading={(!!copy && src.loading) || (!!rid && recipe.loading)} missing={!!editId && !src.data}>
       {() => {
+        const edit = editId ? src.data : null;
         const base: Row | null = src.data ?? recipe.data;
         const plan = src.data ? (src.data.pourSteps as Row[]) : ((recipe.data?.pourPlan as Row[]) ?? []);
         const defaults = {
           roastBatchId: roast ?? s(src.data?.roastBatchId),
           recipeId: s(recipe.data?.id ?? src.data?.recipeId),
-          brewedAt: nowTaipeiLocal(),
+          brewedAt: edit ? toTaipeiLocalInput(new Date(edit.brewedAt as string)) : nowTaipeiLocal(),
           grinderId: s(base?.grinderId),
           grindSetting: s(base?.grindSetting),
           dripperId: s(base?.dripperId),
@@ -42,16 +46,19 @@ export default function NewBrewPage() {
           bloomWaterG: s(base?.bloomWaterG),
           pourMethod: s(base?.pourMethod),
           agitation: s(base?.agitation),
-          pourSteps: plan.map((p) => ({ startSec: p.startSec != null ? fmtSec(p.startSec) : "", endSec: p.endSec != null ? fmtSec(p.endSec) : "", waterG: s(p.waterG), note: "" })),
-          deductStock: false,
+          pourSteps: plan.map((p) => ({ startSec: p.startSec != null ? fmtSec(p.startSec) : "", endSec: p.endSec != null ? fmtSec(p.endSec) : "", waterG: s(p.waterG), note: edit ? s(p.note) : "" })),
+          deductStock: edit ? (edit.stockTxId === undefined ? legacy.data.length > 0 : !!edit.stockTxId) : false,
+          ...(edit
+            ? { flowRateGPerSec: s(edit.flowRateGPerSec), tdsPercent: s(edit.tdsPercent), extractionPercent: s(edit.extractionPercent), rating: s(edit.rating), tags: ((edit.tags as string[]) ?? []).join("、"), flavorNotes: s(edit.flavorNotes), note: s(edit.note), isRecommended: !!edit.isRecommended }
+            : {}),
         };
         return (
           <>
-            <PageHeader title={src.data ? "複製手沖參數" : recipe.data ? `使用配方：${recipe.data.name} v${recipe.data.version}` : "新增手沖紀錄"} description="粉水比、烘後天數、累積水量自動計算；分段注水合計需等於總水量" back={{ href: "/brewing/", label: "手沖實驗室" }} />
+            <PageHeader title={edit ? "修改手沖紀錄" : src.data ? "複製手沖參數" : recipe.data ? `使用配方：${recipe.data.name} v${recipe.data.version}` : "新增手沖紀錄"} description="粉水比、烘後天數、累積水量自動計算；分段注水合計需等於總水量" back={edit ? { href: `/brewing/view/?id=${edit.id}`, label: "沖煮紀錄" } : { href: "/brewing/", label: "手沖實驗室" }} />
             <EntityForm
-              key={`${roasts.length}-${grinders.length}-${drippers.length}-${recipes.data.length}`}
+              key={`${roasts.length}-${grinders.length}-${drippers.length}-${recipes.data.length}-${legacy.data.length}`}
               draftKey={src.data || recipe.data ? undefined : "brew-new"}
-              submitLabel="儲存沖煮紀錄"
+              submitLabel={edit ? "儲存修改" : "儲存沖煮紀錄"}
               defaultValues={defaults}
               sections={[
                 { key: "a", title: "豆子與器材" },
@@ -60,7 +67,7 @@ export default function NewBrewPage() {
                 { key: "d", title: "結果與評價" },
               ]}
               fields={[
-                { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
+                edit ? { name: "roastBatchId", label: "", type: "hidden" } : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
                 { name: "brewedAt", label: "沖煮時間", type: "datetime", required: true, section: "a" },
                 { name: "recipeId", label: "使用配方", type: "select", options: recipes.data.map((r) => ({ value: r.id, label: `${r.name} v${r.version}` })), section: "a" },
                 { name: "grinderId", label: "研磨機", type: "select", options: grinders, section: "a" },
@@ -97,9 +104,9 @@ export default function NewBrewPage() {
                 { name: "flavorNotes", label: "風味表現", type: "textarea", section: "d", wide: true },
                 { name: "note", label: "備註", type: "textarea", section: "d", wide: true },
                 { name: "isRecommended", label: "標記為推薦沖煮", type: "checkbox", section: "d" },
-                { name: "deductStock", label: "扣除熟豆庫存（試喝耗用＝粉量）", type: "checkbox", section: "d" },
+                { name: "deductStock", label: "扣除熟豆庫存（試喝耗用＝粉量）", type: "checkbox", section: "d", hint: edit ? "修改粉量或取消勾選時，會自動沖銷原扣庫存再重新扣除" : undefined },
               ]}
-              action={opAction("brew.create", undefined, (d) => `/brewing/view/?id=${d.id}`)}
+              action={edit ? opAction("brew.update", { id: edit.id }, (d) => `/brewing/view/?id=${d.id}`) : opAction("brew.create", undefined, (d) => `/brewing/view/?id=${d.id}`)}
             />
           </>
         );

@@ -29,6 +29,10 @@ export default function BrewDetail() {
                   </LinkButton>
                   <ActionDialog label="存為配方" variant="outline" title="儲存為配方" description="同名配方將建立新版本，舊版本保留。" payload={{ brewId: x.id }} fields={[{ name: "name", label: "配方名稱", required: true, defaultValue: x.recipeLabel?.replace(/ v\d+$/, "") ?? `${x.coffeeName} 手沖` }]} action={opAction("recipe.saveFromBrew")} />
                   <ActionDialog label={x.isRecommended ? "取消推薦" : "標記推薦"} variant="ghost" title={x.isRecommended ? "取消推薦？" : "標記為推薦沖煮？"} payload={{ id: x.id }} action={opAction("brew.toggleRecommended")} />
+                  <LinkButton href={`/brewing/new/?edit=${x.id}`} variant="secondary">
+                    修改
+                  </LinkButton>
+                  <ActionDialog label="刪除" variant="danger" title="刪除這筆沖煮紀錄？" description="若此紀錄曾扣除熟豆庫存，將自動沖銷回庫存；由此紀錄建立的配方不受影響。刪除後無法復原（操作紀錄會保留）。" confirmLabel="確認刪除" payload={{ id: x.id }} action={opAction("brew.delete")} redirectTo="/brewing/" />
                   <LinkButton href={`/brewing/compare/?ids=${same.data.slice(0, 6).map((q) => q.id).join(",")}`} variant="outline">
                     同豆比較
                   </LinkButton>

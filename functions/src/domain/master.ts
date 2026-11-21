@@ -103,6 +103,40 @@ export async function addExperiment(tx: Tx, input: { projectId: string; label: s
   audit(tx, actor, "research.experiment", "ResearchProject", p.id, `新增實驗 v${exps.length + 1} ${input.label}`);
 }
 
+/** 修改實驗版本（版本號不變；設為基準組時取消其他基準） */
+export async function updateExperiment(tx: Tx, input: { projectId: string; expId: string; label: string; experimentDate: string; isBaseline: boolean; variableValues?: string | null; observation?: string | null; roastBatchId?: string | null }, actor: Actor) {
+  const p = await tx.must(C.research, input.projectId, "研究專案");
+  const exps = (p.experiments as Array<Data>) ?? [];
+  const target = exps.find((e) => e.id === input.expId);
+  if (!target) throw new DomainError("找不到實驗版本", "NOT_FOUND", 404);
+  const vars = Object.fromEntries((input.variableValues ?? "").split(/\n|；|;/).map((l) => l.split(/[:：=]/).map((x) => x.trim())).filter((kv) => kv.length === 2 && kv[0]));
+  const rb = input.roastBatchId ? await tx.must(C.roastBatches, input.roastBatchId, "烘焙批次") : null;
+  const next = exps.map((e) =>
+    e.id === input.expId
+      ? { ...e, label: input.label, isBaseline: input.isBaseline, experimentDate: input.experimentDate, variableValues: vars, observation: input.observation ?? null, roastBatchId: rb?.id ?? null, batchNo: rb?.batchNo ?? null }
+      : input.isBaseline
+        ? { ...e, isBaseline: false }
+        : e,
+  );
+  await tx.update(C.research, p.id, { experiments: next, updatedAt: nowIso() });
+  audit(tx, actor, "research.experiment.update", "ResearchProject", p.id, `修改實驗 v${target.version} ${input.label}`);
+}
+
+export async function deleteExperiment(tx: Tx, projectId: string, expId: string, actor: Actor) {
+  const p = await tx.must(C.research, projectId, "研究專案");
+  const exps = (p.experiments as Array<Data>) ?? [];
+  const target = exps.find((e) => e.id === expId);
+  if (!target) throw new DomainError("找不到實驗版本", "NOT_FOUND", 404);
+  await tx.update(C.research, p.id, { experiments: exps.filter((e) => e.id !== expId), updatedAt: nowIso() });
+  audit(tx, actor, "research.experiment.delete", "ResearchProject", p.id, `刪除實驗 v${target.version} ${target.label}`);
+}
+
+export async function deleteResearch(tx: Tx, projectId: string, actor: Actor) {
+  const p = await tx.must(C.research, projectId, "研究專案");
+  await tx.delete(C.research, projectId);
+  audit(tx, actor, "research.delete", "ResearchProject", projectId, `刪除研究專案 ${p.code ?? ""} ${p.name}`);
+}
+
 export async function setBaseline(tx: Tx, projectId: string, expId: string, actor: Actor) {
   const p = await tx.must(C.research, projectId, "研究專案");
   await tx.update(C.research, p.id, { experiments: ((p.experiments as Array<Data>) ?? []).map((e) => ({ ...e, isBaseline: e.id === expId })) });

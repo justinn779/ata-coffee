@@ -14,11 +14,11 @@ import { MANUAL_TX_TYPES, manualAdjust, reverseTransaction, reconcile } from "./
 import { correctGreenCost, receiveGreenPurchase } from "./domain/green";
 import { createRoastBatch, type RoastExtraCost } from "./domain/roasting";
 import { cancelProductionOrder, completeProductionOrder, createProductionOrder } from "./domain/production";
-import { addOrderCost, cancelOrder, completeOrder, confirmPayment, createOrder, createReturn, inspectReturnItem, markPaymentPending, recordRefund, shipOrder } from "./domain/orders";
-import { createBrew, createCupping, saveRecipeFromBrew } from "./domain/lab";
+import { addOrderCost, cancelOrder, completeOrder, confirmPayment, createOrder, createReturn, inspectReturnItem, markPaymentPending, recordRefund, shipOrder, updateOrder } from "./domain/orders";
+import { createBrew, createCupping, deleteBrew, deleteCupping, saveRecipeFromBrew, updateBrew, updateCupping } from "./domain/lab";
 import { lossStats, monthlyReport, skuPerformance } from "./domain/reports";
 import { setTracePublished, traceOrder } from "./domain/traceability";
-import { addExperiment, createApiKey, receiveMaterial, saveProduct, saveVariant, setBaseline, setLotStatus, upsert } from "./domain/master";
+import { addExperiment, createApiKey, deleteExperiment, deleteResearch, updateExperiment, receiveMaterial, saveProduct, saveVariant, setBaseline, setLotStatus, upsert } from "./domain/master";
 import { saveCurve, sha256 } from "./domain/curves";
 import { detectMapping, parseArtisanAlog, parseCsvCurve, preprocessCsv, type ColumnMapping } from "./curves/parse";
 
@@ -35,6 +35,36 @@ interface Op<S extends z.ZodTypeAny> {
 }
 const op = <S extends z.ZodTypeAny>(schema: S, run: (input: z.infer<S>, ctx: OpCtx) => Promise<unknown>): Op<S> => ({ schema, run });
 const id = z.object({ id: docId("資料") });
+const cuppingSchema = z.object({ roastBatchId: docId("烘焙批次"), templateId: docId("評分模板"), cuppedAt: isoDateTime("杯測時間"), grindSetting: optStr(100), doseG: optDec("粉量", { min: 0 }), waterG: optDec("水量", { min: 0 }), waterTempC: optDec("水溫", { min: 0 }), scores: z.record(z.string(), optDec("分數", { min: 0 })).default({}), tags: optStr(500), defects: optStr(), description: optStr(), evaluator: optStr(100), consumedG: optDec("耗用量", { min: 0 }), deductStock: bool() });
+const brewSchema = z.object({
+      roastBatchId: docId("烘焙批次"),
+      recipeId: optDocId(),
+      brewedAt: isoDateTime("沖煮時間"),
+      grinderId: optDocId(),
+      grindSetting: optStr(100),
+      dripperId: optDocId(),
+      filterId: optDocId(),
+      doseG: reqDec("粉量", { positive: true }),
+      waterG: reqDec("總水量", { positive: true }),
+      waterTempC: optDec("水溫", { min: 0 }),
+      waterQuality: optStr(200),
+      tdsPercent: optDec("TDS", { min: 0 }),
+      extractionPercent: optDec("萃取率", { min: 0 }),
+      totalTimeSec: optMmSs("總沖煮時間"),
+      bloomTimeSec: optMmSs("悶蒸時間"),
+      bloomWaterG: optDec("悶蒸水量", { min: 0 }),
+      pourMethod: optStr(200),
+      flowRateGPerSec: optDec("流速", { min: 0 }),
+      agitation: optStr(200),
+      flavorNotes: optStr(),
+      tags: optStr(500),
+      rating: optDec("評價", { min: 0 }),
+      note: optStr(),
+      isRecommended: bool(),
+      deductStock: bool(),
+      pourSteps: z.array(z.object({ startSec: optMmSs("起始時間"), endSec: optMmSs("結束時間"), waterG: reqDec("注水量", { positive: true }), note: optStr(200) })).default([]),
+    });
+const experimentSchema = z.object({ projectId: docId("專案"), label: reqStr("實驗名稱"), experimentDate: isoDate("實驗日期"), isBaseline: boolStr(), variableValues: optStr(), observation: optStr(), roastBatchId: optDocId() });
 const tx = <T>(ctx: OpCtx, fn: Parameters<typeof runTx<T>>[1]) => runTx(ctx.db, fn);
 
 const coffeeSchema = z.object({
@@ -154,13 +184,13 @@ export const OPS = {
       return { message: "已更新（重量與時間等已過帳數據不可修改）" };
     }),
   ),
-  "curve.preview": op(z.object({ storagePath: reqStr("檔案", 500), fileName: reqStr("檔名", 200), mapping: z.record(z.string()).nullable().optional(), unit: z.enum(["C", "F"]).default("C"), roastBatchId: optDocId() }), async (i, ctx) => {
+  "curve.preview": op(z.object({ storagePath: reqStr("檔案", 500), fileName: reqStr("檔名", 200), mapping: z.record(z.string(), z.string()).nullable().optional(), unit: z.enum(["C", "F"]).default("C"), roastBatchId: optDocId() }), async (i, ctx) => {
     const { buf } = await ctx.readFile!(i.storagePath);
     const p = parseCurveFile(buf, i.fileName, i.mapping ?? null, i.unit);
     const dup = i.roastBatchId ? (await ctx.db.collection(C.uniq).doc(`curve:${i.roastBatchId}:${sha256(buf)}`).get()).exists : false;
     return { ...p.summary, duplicate: dup };
   }),
-  "curve.import": op(z.object({ storagePath: reqStr("檔案", 500), fileName: reqStr("檔名", 200), mapping: z.record(z.string()).nullable().optional(), unit: z.enum(["C", "F"]).default("C"), roastBatchId: docId("烘焙批次"), importEvents: z.boolean().default(false) }), async (i, ctx) => {
+  "curve.import": op(z.object({ storagePath: reqStr("檔案", 500), fileName: reqStr("檔名", 200), mapping: z.record(z.string(), z.string()).nullable().optional(), unit: z.enum(["C", "F"]).default("C"), roastBatchId: docId("烘焙批次"), importEvents: z.boolean().default(false) }), async (i, ctx) => {
     const { buf } = await ctx.readFile!(i.storagePath);
     const p = parseCurveFile(buf, i.fileName, i.mapping ?? null, i.unit);
     await tx(ctx, (t) => saveCurve(t, { roastBatchId: i.roastBatchId, source: p.format, fileName: i.fileName, storagePath: i.storagePath, fileSha256: sha256(buf), mapping: p.mapping, parsed: p.parsed, importEvents: i.importEvents }, ctx.actor));
@@ -176,40 +206,17 @@ export const OPS = {
 
   // ── 杯測／手沖／研究 ──
   "cupping.create": op(
-    z.object({ roastBatchId: docId("烘焙批次"), templateId: docId("評分模板"), cuppedAt: isoDateTime("杯測時間"), grindSetting: optStr(100), doseG: optDec("粉量", { min: 0 }), waterG: optDec("水量", { min: 0 }), waterTempC: optDec("水溫", { min: 0 }), scores: z.record(optDec("分數", { min: 0 })).default({}), tags: optStr(500), defects: optStr(), description: optStr(), evaluator: optStr(100), consumedG: optDec("耗用量", { min: 0 }), deductStock: bool() }),
+    cuppingSchema,
     async (i, ctx) => ({ id: (await tx(ctx, (t) => createCupping(t, i, ctx.actor))).id }),
   ),
+  "cupping.update": op(cuppingSchema.omit({ roastBatchId: true }).extend({ id: docId("杯測紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateCupping(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新杯測紀錄" }))),
+  "cupping.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteCupping(t, id, ctx.actor)).then(() => ({ message: "已刪除杯測紀錄" }))),
   "brew.create": op(
-    z.object({
-      roastBatchId: docId("烘焙批次"),
-      recipeId: optDocId(),
-      brewedAt: isoDateTime("沖煮時間"),
-      grinderId: optDocId(),
-      grindSetting: optStr(100),
-      dripperId: optDocId(),
-      filterId: optDocId(),
-      doseG: reqDec("粉量", { positive: true }),
-      waterG: reqDec("總水量", { positive: true }),
-      waterTempC: optDec("水溫", { min: 0 }),
-      waterQuality: optStr(200),
-      tdsPercent: optDec("TDS", { min: 0 }),
-      extractionPercent: optDec("萃取率", { min: 0 }),
-      totalTimeSec: optMmSs("總沖煮時間"),
-      bloomTimeSec: optMmSs("悶蒸時間"),
-      bloomWaterG: optDec("悶蒸水量", { min: 0 }),
-      pourMethod: optStr(200),
-      flowRateGPerSec: optDec("流速", { min: 0 }),
-      agitation: optStr(200),
-      flavorNotes: optStr(),
-      tags: optStr(500),
-      rating: optDec("評價", { min: 0 }),
-      note: optStr(),
-      isRecommended: bool(),
-      deductStock: bool(),
-      pourSteps: z.array(z.object({ startSec: optMmSs("起始時間"), endSec: optMmSs("結束時間"), waterG: reqDec("注水量", { positive: true }), note: optStr(200) })).default([]),
-    }),
+    brewSchema,
     async (i, ctx) => ({ id: (await tx(ctx, (t) => createBrew(t, i, ctx.actor))).id }),
   ),
+  "brew.update": op(brewSchema.omit({ roastBatchId: true }).extend({ id: docId("沖煮紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateBrew(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新沖煮紀錄" }))),
+  "brew.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteBrew(t, id, ctx.actor)).then(() => ({ message: "已刪除沖煮紀錄" }))),
   "brew.toggleRecommended": op(id, ({ id }, ctx) =>
     tx(ctx, async (t) => {
       const b = await t.must(C.brews, id, "沖煮紀錄");
@@ -232,7 +239,10 @@ export const OPS = {
     z.object({ id: optDocId(), name: reqStr("專案名稱"), hypothesis: optStr(), objective: optStr(), controlledVariables: optStr(), independentVariables: optStr(), status: z.enum(["PLANNING", "RUNNING", "CONCLUDED", "ARCHIVED"]).default("PLANNING"), startDate: optIsoDate(), result: optStr(), conclusion: optStr(), nextSteps: optStr() }),
     ({ id, ...d }, ctx) => tx(ctx, async (t) => upsert(t, C.research, id, id ? d : { ...d, code: await import("./domain/core").then((m) => m.nextNumber(t, "RP", { daily: false })), experiments: [] }, ctx.actor, { label: "研究專案" })),
   ),
-  "research.addExperiment": op(z.object({ projectId: docId("專案"), label: reqStr("實驗名稱"), experimentDate: isoDate("實驗日期"), isBaseline: boolStr(), variableValues: optStr(), observation: optStr(), roastBatchId: optDocId() }), (i, ctx) => tx(ctx, (t) => addExperiment(t, i, ctx.actor)).then(() => ({ message: "已新增實驗版本" }))),
+  "research.addExperiment": op(experimentSchema, (i, ctx) => tx(ctx, (t) => addExperiment(t, i, ctx.actor)).then(() => ({ message: "已新增實驗版本" }))),
+  "research.updateExperiment": op(experimentSchema.extend({ expId: reqStr("實驗") }), (i, ctx) => tx(ctx, (t) => updateExperiment(t, i, ctx.actor)).then(() => ({ message: "已更新實驗版本" }))),
+  "research.deleteExperiment": op(z.object({ projectId: docId("專案"), expId: reqStr("實驗") }), (i, ctx) => tx(ctx, (t) => deleteExperiment(t, i.projectId, i.expId, ctx.actor)).then(() => ({ message: "已刪除實驗版本" }))),
+  "research.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteResearch(t, id, ctx.actor)).then(() => ({ message: "已刪除研究專案" }))),
   "research.setBaseline": op(z.object({ projectId: docId("專案"), expId: reqStr("實驗") }), (i, ctx) => tx(ctx, (t) => setBaseline(t, i.projectId, i.expId, ctx.actor))),
 
   // ── 庫存 ──
@@ -313,6 +323,29 @@ export const OPS = {
         return createOrder(t, { ...i, customerName: name, customerPhone: i.customerPhone || (c?.phone as string) || null, customerEmail: i.customerEmail || (c?.email as string) || null, shippingAddress: i.shippingAddress || (c?.address as string) || null }, ctx.actor);
       });
       return { id: r.order.id, duplicate: r.duplicate };
+    },
+  ),
+  "order.update": op(
+    z.object({
+      orderId: docId("訂單"),
+      customerId: optDocId(),
+      customerName: optStr(100),
+      customerPhone: optStr(50),
+      customerEmail: optStr(200),
+      shippingAddress: optStr(500),
+      shippingMethod: optStr(100),
+      shippingFee: optDec("運費", { min: 0 }),
+      note: optStr(),
+      items: z.array(z.object({ variantId: docId("商品"), quantity: reqInt("數量"), discount: optDec("折扣", { min: 0 }) })).min(1, "至少需要一項商品"),
+    }),
+    async ({ orderId, ...i }, ctx) => {
+      const o = await tx(ctx, async (t) => {
+        const c = i.customerId ? await t.must(C.customers, i.customerId, "顧客") : null;
+        const name = i.customerName || (c?.name as string);
+        if (!name) throw new DomainError("請選擇顧客或填寫顧客名稱");
+        return updateOrder(t, orderId, { ...i, customerName: name }, ctx.actor);
+      });
+      return { id: o.id, message: `已修改訂單，金額 ${o.total}` };
     },
   ),
   "order.markPending": op(z.object({ orderId: docId("訂單"), reference: optStr(100) }), (i, ctx) => tx(ctx, (t) => markPaymentPending(t, i.orderId, ctx.actor, i.reference)).then(() => ({ message: "已標記為待確認" }))),

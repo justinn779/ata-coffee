@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { EmailAuthProvider, GoogleAuthProvider, linkWithPopup, reauthenticateWithCredential, unlink, updatePassword } from "firebase/auth";
+import { googleErrorMessage, googleProvider } from "@/lib/google-auth";
 import { collection, getDocs } from "firebase/firestore";
 import { getBlob, ref, uploadBytes } from "firebase/storage";
 import { fmtNum } from "@/lib/decimal";
@@ -95,6 +96,78 @@ function Master({ col, op, title, desc, head, row, fields, extra }: { col: strin
 }
 
 function Account() {
+  return (
+    <div className="grid gap-6">
+      <GoogleLink />
+      <PasswordCard />
+    </div>
+  );
+}
+
+/** 綁定 Google：同一個帳號（同一 uid、同樣的管理員權限）可用密碼或 Google 登入 */
+function GoogleLink() {
+  const { user } = useAuth();
+  const [providers, setProviders] = useState<string[]>(() => user?.providerData.map((p) => p.providerId) ?? []);
+  const [busy, setBusy] = useState(false);
+  const google = user?.providerData.find((p) => p.providerId === GoogleAuthProvider.PROVIDER_ID);
+  const linked = providers.includes(GoogleAuthProvider.PROVIDER_ID);
+  const hasPassword = providers.includes("password");
+  const refresh = () => setProviders(user?.providerData.map((p) => p.providerId) ?? []);
+  const link = async () => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      await linkWithPopup(user, googleProvider());
+      await user.reload();
+      refresh();
+      toast("已綁定 Google 帳號，之後可直接用 Google 登入");
+    } catch (e) {
+      const m = googleErrorMessage(e);
+      if (m) toast(m, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const doUnlink = async () => {
+    if (!user || !confirm("解除綁定後將無法再用此 Google 帳號登入，確定嗎？")) return;
+    setBusy(true);
+    try {
+      await unlink(user, GoogleAuthProvider.PROVIDER_ID);
+      await user.reload();
+      refresh();
+      toast("已解除 Google 綁定");
+    } catch (e) {
+      toast(googleErrorMessage(e) ?? "解除綁定失敗", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader title="Google 帳號" description="綁定後可在登入頁按「使用 Google 登入」，權限與目前帳號相同；未綁定的 Google 帳號無法進入後台。" action={linked ? <Badge tone="sage">已綁定</Badge> : <Badge>未綁定</Badge>} />
+      <CardBody className="flex flex-wrap items-center gap-3 text-sm">
+        {linked ? (
+          <>
+            <span>{google?.email ?? "已綁定 Google"}</span>
+            {hasPassword ? (
+              <Button variant="ghost" size="sm" disabled={busy} onClick={doUnlink}>
+                解除綁定
+              </Button>
+            ) : (
+              <span className="text-xs text-muted">（此帳號沒有設定密碼，為避免無法登入，不能解除綁定）</span>
+            )}
+          </>
+        ) : (
+          <Button disabled={busy} onClick={link}>
+            {busy ? "處理中…" : "綁定 Google 帳號"}
+          </Button>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function PasswordCard() {
   const { user, admin } = useAuth();
   return (
     <Card>

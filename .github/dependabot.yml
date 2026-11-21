@@ -1,0 +1,44 @@
+# 每週自動檢查套件更新並開 Pull Request；PR 會先跑完整測試（test-and-deploy workflow），通過後再手動合併。
+# 小版本與修補版本合併成一個 PR；大版本（可能不相容）各自一個 PR，需人工確認。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Next 16 / ESLint 10 / TypeScript 7 等大版本需人工規劃升級
+      - dependency-name: next
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint-config-next
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /functions
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    labels: [dependencies, functions]
+    groups:
+      functions-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      timezone: Asia/Taipei
+    labels: [dependencies, ci]
+    groups:
+      actions:
+        patterns: ["*"]

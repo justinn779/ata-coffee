@@ -25,3 +25,21 @@ test("不存在的履歷代碼顯示找不到", async ({ page }) => {
   await page.goto("t/?c=notexist123");
   await expect(page.getByText("找不到此商品履歷")).toBeVisible();
 });
+
+test("忘記密碼：未填 Email 提示；填寫後顯示寄送說明（不透露帳號是否存在）", async ({ page }) => {
+  await page.goto("orders/");
+  await page.getByRole("button", { name: "忘記密碼？" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "請先在上方輸入電子郵件" })).toBeVisible();
+  await page.getByLabel("電子郵件").fill("admin@ata.local");
+  await page.getByRole("button", { name: "忘記密碼？" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "重設密碼信已寄出" })).toBeVisible();
+  await page.getByLabel("電子郵件").fill("nobody@ata.local");
+  await page.getByRole("button", { name: "忘記密碼？" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "重設密碼信已寄出" })).toBeVisible();
+});
+
+test("登入頁提供 Google 登入", async ({ page }) => {
+  await page.goto("orders/");
+  await expect(page.getByRole("button", { name: "使用 Google 登入" })).toBeVisible();
+  await expect(page.getByText("Google 帳號需先由管理員")).toBeVisible();
+});

@@ -95,11 +95,16 @@ export class Tx {
   }
 
   async releaseUnique(kind: string, value: string) {
-    const id = `${kind}:${value}`.replace(/\//g, "∕");
-    await this.get("uniq", id);
-    this.cache.set(this.key("uniq", id), null);
-    if (!this.writes.has(this.key("uniq", id))) this.writeOrder.push(this.key("uniq", id));
-    this.writes.set(this.key("uniq", id), null);
+    await this.delete("uniq", `${kind}:${value}`.replace(/\//g, "∕"));
+  }
+
+  /** 刪除文件（先讀取以符合「讀取在寫入之前」並讓並行交易衝突時重試） */
+  async delete(col: string, id: string) {
+    const k = this.key(col, id);
+    await this.get(col, id);
+    this.cache.set(k, null);
+    if (!this.writes.has(k)) this.writeOrder.push(k);
+    this.writes.set(k, null);
   }
 
   /** 將暫存寫入交給 Firestore 交易（由 runTx 呼叫） */

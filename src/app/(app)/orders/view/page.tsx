@@ -8,7 +8,7 @@ import { useCol, useDocument, useOp, type Row } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { ActionDialog } from "@/components/action-dialog";
 import { StatusBadge } from "@/components/status";
-import { A, Badge, Card, CardBody, CardHeader, KV, Notice, PageHeader, SimpleTable } from "@/components/ui";
+import { A, Badge, Card, CardBody, CardHeader, KV, LinkButton, Notice, PageHeader, SimpleTable } from "@/components/ui";
 
 interface Trace {
   chains: Array<{ sku: string; quantity: string; unitCost: string; packaging: Row | null; roast: Row | null; green: Row | null }>;
@@ -69,6 +69,11 @@ export default function OrderDetail() {
                     />
                   )}
                   {["PAID", "PARTIALLY_REFUNDED"].includes(x.paymentStatus) && !preShip && <ActionDialog label="記錄退款" variant="ghost" title="記錄退款" payload={{ orderId: x.id }} fields={[{ name: "amount", label: "退款金額", type: "number", required: true }, { name: "reference", label: "參考資訊" }, { name: "note", label: "備註" }]} action={opAction("order.refund")} />}
+                  {preShip && ["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus) && (
+                    <LinkButton href={`/orders/new/?edit=${x.id}`} variant="secondary">
+                      修改訂單
+                    </LinkButton>
+                  )}
                   {preShip && <ActionDialog label="取消訂單" variant="danger" title="取消訂單？" description="將釋放所有保留量、取消未完成的接單後分裝單；歷史紀錄保留。" payload={{ orderId: x.id }} fields={[{ name: "reason", label: "取消原因" }, ...(x.paymentStatus === "PAID" ? [{ name: "refundAmount", label: "同時記錄退款金額", type: "number" as const, defaultValue: x.total }] : [])]} action={opAction("order.cancel")} />}
                 </>
               }

@@ -39,37 +39,7 @@ export async function createOrder(tx: Tx, input: CreateOrderInput, actor: Actor)
   }
   if (!input.items.length) throw new DomainError("訂單至少需要一項商品");
   if (!input.customerName?.trim()) throw new DomainError("請填寫顧客名稱");
-  const settings = await getSettings(tx);
-  const taxMode = settings.tax.mode;
-  const taxRate = D(settings.tax.rate);
-
-  const merged = new Map<string, { quantity: number; discount: Decimal }>();
-  for (const it of input.items) {
-    if (!Number.isInteger(it.quantity) || it.quantity <= 0) throw new DomainError("數量必須為正整數");
-    const prev = merged.get(it.variantId);
-    merged.set(it.variantId, { quantity: (prev?.quantity ?? 0) + it.quantity, discount: (prev?.discount ?? D(0)).add(it.discount ?? 0) });
-  }
-  const variants = [];
-  for (const vid of merged.keys()) {
-    const v = await tx.must(C.variants, vid, "商品 SKU");
-    if (v.status === "ARCHIVED" || v.productStatus === "ARCHIVED") throw new DomainError(`${v.sku} 已封存，無法下單`);
-    variants.push(v);
-  }
-
-  let subtotal = D(0);
-  let discountTotal = D(0);
-  let taxTotal = D(0);
-  const lines = variants.map((v) => {
-    const m = merged.get(v.id)!;
-    const gross = D(v.salePrice as string).mul(m.quantity);
-    if (m.discount.isNegative() || m.discount.gt(gross)) throw new DomainError(`${v.sku} 折扣金額不合理`);
-    const lineTotal = money(gross.sub(m.discount));
-    const tax = taxMode === "INCLUSIVE" ? money(lineTotal.sub(lineTotal.div(taxRate.add(1)))) : taxMode === "EXCLUSIVE" ? money(lineTotal.mul(taxRate)) : D(0);
-    subtotal = subtotal.add(lineTotal);
-    discountTotal = discountTotal.add(m.discount);
-    taxTotal = taxTotal.add(tax);
-    return { v, quantity: m.quantity, discount: m.discount, lineTotal, tax };
-  });
+  const { lines, subtotal, discountTotal, taxTotal, taxMode, taxRate } = await priceLines(tx, input.items);
   const shippingFee = money(input.shippingFee ?? 0);
   if (shippingFee.isNegative()) throw new DomainError("運費不可為負");
   const total = subtotal.add(taxMode === "EXCLUSIVE" ? taxTotal : 0).add(shippingFee);
@@ -108,16 +78,62 @@ export async function createOrder(tx: Tx, input: CreateOrderInput, actor: Actor)
   });
   if (input.idempotencyKey) tx.set(C.uniq, idemDocId(input.idempotencyKey), { kind: "orderIdempotency", orderId: order.id, at: now });
 
+  await createItems(tx, { id: order.id, orderNo, orderedAt: order.orderedAt }, lines, actor);
+  await refreshFulfillment(tx, order.id);
+  audit(tx, actor, "order.create", "SalesOrder", order.id, `建立訂單 ${orderNo}，金額 ${total}`);
+  return { order: await tx.must(C.orders, order.id, "訂單"), duplicate: false };
+}
+
+
+type PricedLine = { v: Record<string, unknown> & { id: string }; quantity: number; discount: Decimal; unitPrice: Decimal; lineTotal: Decimal; tax: Decimal };
+
+/**
+ * 計價：價格一律由資料庫讀取。keepPrices 提供時（修改訂單），原訂單已有的 SKU 沿用下單時的單價。
+ */
+async function priceLines(tx: Tx, items: CreateOrderInput["items"], keepPrices?: Map<string, string>) {
+  if (!items.length) throw new DomainError("訂單至少需要一項商品");
+  const settings = await getSettings(tx);
+  const taxMode = settings.tax.mode;
+  const taxRate = D(settings.tax.rate);
+  const merged = new Map<string, { quantity: number; discount: Decimal }>();
+  for (const it of items) {
+    if (!Number.isInteger(it.quantity) || it.quantity <= 0) throw new DomainError("數量必須為正整數");
+    const prev = merged.get(it.variantId);
+    merged.set(it.variantId, { quantity: (prev?.quantity ?? 0) + it.quantity, discount: (prev?.discount ?? D(0)).add(it.discount ?? 0) });
+  }
+  let subtotal = D(0);
+  let discountTotal = D(0);
+  let taxTotal = D(0);
+  const lines: PricedLine[] = [];
+  for (const [vid, m] of merged) {
+    const v = await tx.must(C.variants, vid, "商品 SKU");
+    const kept = keepPrices?.get(vid);
+    if (!kept && (v.status === "ARCHIVED" || v.productStatus === "ARCHIVED")) throw new DomainError(`${v.sku} 已封存，無法下單`);
+    const unitPrice = D(kept ?? (v.salePrice as string));
+    const gross = unitPrice.mul(m.quantity);
+    if (m.discount.isNegative() || m.discount.gt(gross)) throw new DomainError(`${v.sku} 折扣金額不合理`);
+    const lineTotal = money(gross.sub(m.discount));
+    const tax = taxMode === "INCLUSIVE" ? money(lineTotal.sub(lineTotal.div(taxRate.add(1)))) : taxMode === "EXCLUSIVE" ? money(lineTotal.mul(taxRate)) : D(0);
+    subtotal = subtotal.add(lineTotal);
+    discountTotal = discountTotal.add(m.discount);
+    taxTotal = taxTotal.add(tax);
+    lines.push({ v, quantity: m.quantity, discount: m.discount, unitPrice, lineTotal, tax });
+  }
+  return { lines, subtotal, discountTotal, taxTotal, taxMode, taxRate };
+}
+
+/** 建立訂單明細，並以 FIFO 保留成品；可接單後分裝的 SKU 現貨不足時建立分裝單（不可超賣） */
+async function createItems(tx: Tx, order: { id: string; orderNo: string; orderedAt: unknown }, lines: PricedLine[], actor: Actor) {
   for (const l of lines) {
     const mode = l.v.isBundle ? "STOCK" : l.v.stockPolicy === "NOT_TRACKED" ? "NOT_TRACKED" : "STOCK";
     const oi = tx.create(C.orderItems, {
       orderId: order.id,
-      orderNo,
+      orderNo: order.orderNo,
       variantId: l.v.id,
       skuSnapshot: l.v.sku,
       nameSnapshot: `${l.v.productName}｜${l.v.name}`,
       quantity: l.quantity,
-      unitPriceSnapshot: toDb(l.v.salePrice as string, 2),
+      unitPriceSnapshot: toDb(l.unitPrice, 2),
       discount: toDb(l.discount, 2),
       taxAmount: toDb(l.tax, 2),
       lineTotal: toDb(l.lineTotal, 2),
@@ -144,9 +160,64 @@ export async function createOrder(tx: Tx, input: CreateOrderInput, actor: Actor)
     }
     await refreshItemCostSnapshot(tx, oi.id);
   }
-  await refreshFulfillment(tx, order.id);
-  audit(tx, actor, "order.create", "SalesOrder", order.id, `建立訂單 ${orderNo}，金額 ${total}`);
-  return { order: await tx.must(C.orders, order.id, "訂單"), duplicate: false };
+}
+
+export type UpdateOrderInput = Omit<CreateOrderInput, "channel" | "externalRef" | "idempotencyKey" | "orderedAt">;
+
+/**
+ * 出貨前修改訂單（品項、數量、折扣、運費、收件資訊）。
+ * 限制：尚未出貨、且尚未確認付款（未付款或待確認）。已付款請先取消並退款後重新建單。
+ * 作法（同一交易內）：釋放原保留量、取消未完成的接單後分裝單、刪除原明細 → 依新內容重新計價並保留庫存。
+ * 原訂單已有的 SKU 沿用下單時單價；新加入的 SKU 使用目前售價。任何品項庫存不足時整筆修改失敗、原訂單不變。
+ */
+export async function updateOrder(tx: Tx, orderId: string, input: UpdateOrderInput, actor: Actor) {
+  const o = await tx.must(C.orders, orderId, "訂單");
+  if (!["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP"].includes(o.fulfillmentStatus as string)) throw new InvalidStateError("只有尚未出貨的訂單可以修改");
+  if (!["UNPAID", "PENDING_CONFIRMATION"].includes(o.paymentStatus as string)) throw new InvalidStateError("訂單已確認付款，不可修改內容；請先取消（含退款）後重新建立訂單");
+  if (!input.customerName?.trim()) throw new DomainError("請填寫顧客名稱");
+  const oldItems = await tx.query<OrderItemDoc>(C.orderItems, [["orderId", "==", orderId]]);
+  const allocs = await tx.query<AllocationDoc>(C.allocations, [["orderId", "==", orderId]]);
+  if (allocs.some((a) => a.status === "SHIPPED")) throw new InvalidStateError("訂單已有出貨紀錄，不可修改");
+  const pos = (await tx.query(C.productionOrders, [["orderId", "==", orderId]])).filter((p) => p.status === "PLANNED");
+
+  // 1) 釋放原保留、取消未完成的接單後分裝單、刪除原明細
+  for (const a of allocs) {
+    if (a.status === "RESERVED") await releaseReservation(tx, a.reservationId);
+    await tx.delete(C.allocations, a.id);
+  }
+  for (const p of pos) await cancelProductionOrder(tx, p.id, actor, { reason: `訂單 ${o.orderNo} 修改`, fromOrder: true });
+  for (const it of oldItems) await tx.delete(C.orderItems, it.id);
+
+  // 2) 重新計價、建立明細並保留庫存
+  const keep = new Map(oldItems.map((it) => [it.variantId, it.unitPriceSnapshot as string]));
+  const { lines, subtotal, discountTotal, taxTotal, taxMode, taxRate } = await priceLines(tx, input.items, keep);
+  const shippingFee = money(input.shippingFee ?? 0);
+  if (shippingFee.isNegative()) throw new DomainError("運費不可為負");
+  const total = subtotal.add(taxMode === "EXCLUSIVE" ? taxTotal : 0).add(shippingFee);
+  await tx.update(C.orders, orderId, {
+    customerId: input.customerId ?? null,
+    customerName: input.customerName.trim(),
+    customerPhone: input.customerPhone ?? null,
+    customerEmail: input.customerEmail ?? null,
+    shippingAddress: input.shippingAddress ?? null,
+    shippingMethod: input.shippingMethod ?? null,
+    note: input.note ?? null,
+    taxMode,
+    taxRate: toDb(taxRate, 4),
+    subtotal: toDb(subtotal, 2),
+    discountTotal: toDb(discountTotal, 2),
+    taxTotal: toDb(taxTotal, 2),
+    shippingFee: toDb(shippingFee, 2),
+    total: toDb(total, 2),
+    fulfillmentStatus: "PENDING",
+    updatedAt: nowIso(),
+  });
+  await createItems(tx, { id: orderId, orderNo: o.orderNo as string, orderedAt: o.orderedAt }, lines, actor);
+  await refreshFulfillment(tx, orderId);
+  const before = oldItems.map((it) => `${it.skuSnapshot}×${it.quantity}`).join("、");
+  const after = lines.map((l) => `${l.v.sku}×${l.quantity}`).join("、");
+  audit(tx, actor, "order.update", "SalesOrder", orderId, `修改訂單 ${o.orderNo}：${before} → ${after}；金額 ${o.total} → ${toDb(total, 2)}`);
+  return tx.must(C.orders, orderId, "訂單");
 }
 
 async function planMadeToOrder(tx: Tx, args: { orderId: string; orderItemId: string; variant: Record<string, unknown> & { id: string }; units: number; actor: Actor }) {

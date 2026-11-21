@@ -1,27 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { nowTaipeiLocal } from "@/lib/time";
+import { fmtDateTime, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
-import { useCol } from "@/lib/data";
+import { useCol, useDocument } from "@/lib/data";
 import { Guard, useQS, useRoastBatchOptions } from "@/lib/page";
 import { EntityForm, type FieldDef } from "@/components/entity-form";
 import { Notice, PageHeader } from "@/components/ui";
 
+const s = (v: unknown) => (v == null ? "" : String(v));
+
+/** 新增杯測；帶 ?edit=<id> 時為修改模式（烘焙批次與評分模板不可變更） */
 export default function NewCuppingPage() {
   const roast = useQS("roast");
-  const tid = useQS("template");
+  const editId = useQS("edit");
+  const tidQS = useQS("template");
   const roasts = useRoastBatchOptions();
   const templates = useCol("cuppingTemplates", [], "name", false);
+  const cur = useDocument("cuppingSessions", editId);
+  // 舊資料未記錄 stockTxId 時，以備註找回當初的扣庫存交易
+  const legacy = useCol(editId && cur.data && cur.data.stockTxId === undefined ? "invTxs" : null, [["note", `杯測 ${(editId ?? "").slice(0, 8)}`]]);
   return (
-    <Guard loading={templates.loading} error={templates.error}>
+    <Guard loading={templates.loading || (!!editId && cur.loading)} error={templates.error ?? cur.error} missing={!!editId && !cur.data}>
       {() => {
+        const x = cur.data;
+        const tid = x ? (x.templateId as string) : tidQS;
         const list = [...templates.data].sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
-        const tpl = list.find((t) => t.id === tid) ?? list[0];
-        if (!tpl) return <Notice tone="warning">請先於系統設定建立杯測評分模板。</Notice>;
+        const tpl = list.find((t) => t.id === tid) ?? (x ? undefined : list[0]);
+        if (!tpl) return <Notice tone="warning">{x ? "此杯測使用的評分模板已不存在，無法修改。" : "請先於系統設定建立杯測評分模板。"}</Notice>;
         const attrs = tpl.attributes as Array<{ key: string; label: string }>;
         const fields: FieldDef[] = [
-          { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
+          x
+            ? { name: "roastBatchId", label: "", type: "hidden" }
+            : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
           { name: "templateId", label: "", type: "hidden" },
           { name: "cuppedAt", label: "杯測時間", type: "datetime", required: true, section: "a", hint: "烘後天數將自動計算" },
           { name: "evaluator", label: "評分者", section: "a" },
@@ -34,12 +45,34 @@ export default function NewCuppingPage() {
           { name: "defects", label: "瑕疵", section: "c", wide: true },
           { name: "description", label: "文字描述", type: "textarea", section: "c", wide: true },
           { name: "consumedG", label: "熟豆耗用量", type: "number", unit: "g", section: "c" },
-          { name: "deductStock", label: "同步扣除熟豆庫存（杯測耗用）", type: "checkbox", section: "c" },
+          { name: "deductStock", label: "同步扣除熟豆庫存（杯測耗用）", type: "checkbox", section: "c", hint: x ? "修改耗用量或取消勾選時，會自動沖銷原扣庫存再重新扣除" : undefined },
         ];
+        const defaults = x
+          ? {
+              roastBatchId: x.roastBatchId,
+              templateId: tpl.id,
+              cuppedAt: toTaipeiLocalInput(new Date(x.cuppedAt as string)),
+              evaluator: s(x.evaluator),
+              grindSetting: s(x.grindSetting),
+              doseG: s(x.doseG),
+              waterG: s(x.waterG),
+              waterTempC: s(x.waterTempC),
+              scores: Object.fromEntries(((x.scores as Array<{ attributeKey: string; score: string }>) ?? []).map((q) => [q.attributeKey, s(q.score)])),
+              tags: ((x.tags as string[]) ?? []).join("、"),
+              defects: s(x.defects),
+              description: s(x.description),
+              consumedG: s(x.consumedG),
+              deductStock: x.stockTxId === undefined ? legacy.data.length > 0 : !!x.stockTxId,
+            }
+          : { roastBatchId: roast ?? "", templateId: tpl.id, cuppedAt: nowTaipeiLocal(), doseG: "8.25", waterG: "150", waterTempC: "93", deductStock: true };
         return (
           <>
-            <PageHeader title="新增杯測" description={`評分系統：${tpl.name}（${tpl.scaleMin}–${tpl.scaleMax} 分，自訂模板，非 SCA 官方標準）`} back={{ href: "/cupping/", label: "杯測實驗室" }} />
-            {list.length > 1 && (
+            <PageHeader
+              title={x ? "修改杯測" : "新增杯測"}
+              description={x ? `${x.batchNo} · ${x.coffeeName} · 原杯測時間 ${fmtDateTime(x.cuppedAt)}（烘焙批次與評分模板不可變更）` : `評分系統：${tpl.name}（${tpl.scaleMin}–${tpl.scaleMax} 分，自訂模板，非 SCA 官方標準）`}
+              back={x ? { href: `/cupping/view/?id=${x.id}`, label: "杯測紀錄" } : { href: "/cupping/", label: "杯測實驗室" }}
+            />
+            {!x && list.length > 1 && (
               <p className="mb-4 text-sm text-muted">
                 切換模板：
                 {list.map((t) => (
@@ -50,17 +83,17 @@ export default function NewCuppingPage() {
               </p>
             )}
             <EntityForm
-              key={`${tpl.id}-${roasts.length}`}
-              draftKey={`cupping-new-${tpl.id}`}
-              submitLabel="儲存杯測"
-              defaultValues={{ roastBatchId: roast ?? "", templateId: tpl.id, cuppedAt: nowTaipeiLocal(), doseG: "8.25", waterG: "150", waterTempC: "93", deductStock: true }}
+              key={x ? `edit-${x.id}-${legacy.data.length}` : `${tpl.id}-${roasts.length}`}
+              draftKey={x ? undefined : `cupping-new-${tpl.id}`}
+              submitLabel={x ? "儲存修改" : "儲存杯測"}
+              defaultValues={defaults}
               sections={[
                 { key: "a", title: "杯測條件" },
                 { key: "b", title: "評分", description: `每項 ${tpl.scaleMin}–${tpl.scaleMax} 分，間距 ${tpl.step}；平均分自動計算` },
                 { key: "c", title: "風味與描述" },
               ]}
               fields={fields}
-              action={opAction("cupping.create", undefined, (d) => `/cupping/view/?id=${d.id}`)}
+              action={x ? opAction("cupping.update", { id: x.id }, (d) => `/cupping/view/?id=${d.id}`) : opAction("cupping.create", undefined, (d) => `/cupping/view/?id=${d.id}`)}
             />
           </>
         );
