@@ -1,5 +1,15 @@
 # 版本紀錄
 
+## v0.2.0 — 2026-11-21
+
+### 變更
+- 架構改為 GitHub Pages（Next.js 靜態匯出）＋ Firebase（Auth、Firestore、Cloud Functions、Cloud Storage）
+- 業務邏輯移至 Cloud Functions，Firestore 交易工作單元確保不超賣、帳本一致
+- Firestore／Storage 安全規則：用戶端只能讀取，所有寫入經 Functions
+- 曲線原始檔與品牌素材改存 Cloud Storage；CSV／JSON 匯出改在瀏覽器產生
+- 新增安全規則測試；E2E 改為靜態站＋模擬器；GitHub Actions 測試通過後自動部署
+- PostgreSQL 版本保留於 postgres-v1 分支
+
 ## v0.1.0 — 2026-11-21
 
 首個可在本機完整運作的版本。
