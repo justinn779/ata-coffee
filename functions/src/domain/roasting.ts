@@ -161,11 +161,4 @@ export async function createRoastBatch(tx: Tx, input: CreateRoastInput, actor: A
   return { batch: { ...batch, invLotId: roastedLot.id }, roastedLot, roastedUnitCost: roastedUnitCost.toDecimalPlaces(6), weightLossPercent: loss, phases };
 }
 
-export function freshnessOf(
-  batch: { restStartDays?: number | null; peakFromDays?: number | null; peakToDays?: number | null; shelfLifeDays?: number | null },
-  coffee: { restStartDays?: number | null; peakFromDays?: number | null; peakToDays?: number | null; shelfLifeDays?: number | null },
-) {
-  const pick = (k: "restStartDays" | "peakFromDays" | "peakToDays" | "shelfLifeDays") =>
-    batch[k] != null ? { value: batch[k]!, source: "批次覆寫" } : coffee[k] != null ? { value: coffee[k]!, source: "咖啡豆預設" } : null;
-  return { restStart: pick("restStartDays"), peakFrom: pick("peakFromDays"), peakTo: pick("peakToDays"), shelfLife: pick("shelfLifeDays") };
-}
+export { freshnessOf } from "../../../src/lib/freshness";

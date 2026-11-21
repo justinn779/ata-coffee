@@ -12,6 +12,7 @@ import { defineString } from "firebase-functions/params";
 import { z } from "zod";
 import { DomainError, errorMessage } from "../../src/lib/errors";
 import { runOp, type OpCtx } from "./ops";
+import { CurveParseError } from "./curves/parse";
 import { runTx, nowIso } from "./tx";
 import { C } from "./types";
 import { claimFirstAdmin, hashApiKey } from "./domain/master";
@@ -26,6 +27,7 @@ const CODE: Record<number, ConstructorParameters<typeof HttpsError>[0]> = { 400:
 
 function toHttpsError(e: unknown): HttpsError {
   if (e instanceof HttpsError) return e;
+  if (e instanceof CurveParseError) return new HttpsError("invalid-argument", ["檔案驗證失敗：", ...e.errors].join("\n"), { code: "CURVE_PARSE", errors: e.errors });
   if (e instanceof DomainError) return new HttpsError(CODE[e.status] ?? "failed-precondition", e.message, { code: e.code, fieldErrors: (e as DomainError & { fieldErrors?: unknown }).fieldErrors ?? null });
   return new HttpsError("internal", errorMessage(e));
 }

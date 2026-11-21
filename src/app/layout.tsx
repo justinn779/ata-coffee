@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-// 字型自行託管（@fontsource，依 unicode-range 分片按需載入），不依賴外部 CDN
 import "@fontsource-variable/inter";
 import "@fontsource/noto-sans-tc/400.css";
 import "@fontsource/noto-sans-tc/500.css";
@@ -7,6 +6,7 @@ import "@fontsource/noto-sans-tc/700.css";
 import "@fontsource/noto-serif-tc/500.css";
 import "@fontsource/noto-serif-tc/600.css";
 import { Toaster } from "@/components/toast";
+import { AuthProvider } from "@/components/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,7 +22,6 @@ export const viewport: Viewport = {
   ],
 };
 
-// 在繪製前套用使用者選擇的主題，避免閃爍
 const themeScript = `try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -32,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         <Toaster />
       </body>
     </html>

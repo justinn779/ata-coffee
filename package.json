@@ -11,7 +11,9 @@
     "test": "firebase emulators:exec --only firestore,auth,storage --project demo-ata-coffee \"vitest run\"",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "functions:build": "esbuild functions/src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=functions/lib/index.js --external:firebase-admin --external:firebase-functions --log-level=warning"
+    "functions:build": "esbuild functions/src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=functions/lib/index.js --external:firebase-admin --external:firebase-functions --log-level=warning",
+    "emulators": "npm run functions:build && firebase emulators:start --only auth,firestore,functions,storage --project demo-ata-coffee",
+    "seed": "tsx scripts/seed-emulator.ts --emulator"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

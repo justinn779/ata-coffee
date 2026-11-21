@@ -334,7 +334,7 @@ describe("Case 10：全流程追溯", () => {
     const o = await op<{ id: string }>("order.create", { customerName: "王小明", customerPhone: "0912345678", shippingAddress: "臺北市", items: [{ variantId: f.v100.id, quantity: "2" }] });
     await op("order.confirmPayment", { orderId: o.id });
     await op("order.ship", { orderId: o.id });
-    const t = await op<{ chains: Array<Record<string, any>>; checks: Array<Record<string, unknown>> }>("order.trace", { orderId: o.id });
+    const t = await op<{ chains: Array<Record<string, any>>; checks: Array<Record<string, unknown>> }>("order.trace", { orderId: o.id }); // eslint-disable-line @typescript-eslint/no-explicit-any
     const c = t.chains[0];
     expect(c.sku).toBe("YRG-100");
     expect(c.packaging.batchNo).toBe(pk.packaging.batchNo);

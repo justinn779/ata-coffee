@@ -68,7 +68,7 @@ export async function receiveGreen(coffeeId: string, grams = 5000, pricePerKg = 
 export async function roast(greenLotId: string, roasterId: string, green = 500, roasted = 425) {
   const r = await op<{ id: string }>("roast.create", { greenLotId, roasterId, roastedAt: "2026-11-10T14:00", greenWeightG: String(green), roastedWeightG: String(roasted), dryEndSec: "4:00", firstCrackStartSec: "8:00", dropSec: "10:00" });
   const b = (await db.collection(C.roastBatches).doc(r.id).get()).data()!;
-  return { batch: { ...b, id: r.id }, roastedLotId: b.invLotId as string };
+  return { batch: { ...b, id: r.id } as Record<string, any>, roastedLotId: b.invLotId as string }; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export async function packageUnits(sourceLotId: string, variantId: string, qty: number, lossG = 0, fill?: string) {
@@ -76,7 +76,7 @@ export async function packageUnits(sourceLotId: string, variantId: string, qty: 
   await op("production.complete", { id: po.id, actualQty: String(qty), lossG: String(lossG) });
   const p = (await db.collection(C.productionOrders).doc(po.id).get()).data()!;
   const pkg = (await db.collection(C.packagingBatches).doc(p.packagingBatchId).get()).data()!;
-  return { poId: po.id, lotId: p.outputLotId as string, packaging: { ...pkg, id: p.packagingBatchId as string } };
+  return { poId: po.id, lotId: p.outputLotId as string, packaging: { ...pkg, id: p.packagingBatchId as string } as Record<string, any> }; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export async function order(variantId: string, quantity: number, key?: string) {
