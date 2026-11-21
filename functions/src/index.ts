@@ -8,7 +8,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, onRequest, type CallableRequest } from "firebase-functions/v2/https";
-import { defineString } from "firebase-functions/params";
+import { defineBoolean, defineString } from "firebase-functions/params";
 import { z } from "zod";
 import { DomainError, errorMessage } from "../../src/lib/errors";
 import { runOp, type OpCtx } from "./ops";
@@ -22,6 +22,8 @@ initializeApp();
 const db = getFirestore();
 setGlobalOptions({ region: "asia-east1", maxInstances: 10 });
 const BOOTSTRAP_ADMIN_EMAIL = defineString("BOOTSTRAP_ADMIN_EMAIL", { default: "" });
+/** App Check 強制驗證：正式環境在 functions/.env.<專案> 設 ENFORCE_APP_CHECK=true；模擬器預設 false */
+const ENFORCE_APP_CHECK = defineBoolean("ENFORCE_APP_CHECK", { default: false });
 
 const CODE: Record<number, ConstructorParameters<typeof HttpsError>[0]> = { 400: "invalid-argument", 401: "unauthenticated", 403: "permission-denied", 404: "not-found", 409: "failed-precondition", 422: "failed-precondition", 429: "resource-exhausted" };
 
@@ -42,7 +44,7 @@ async function readFile(path: string) {
 }
 
 // App Check：正式環境於 functions/.env.<專案> 設定 ENFORCE_APP_CHECK=true，只接受帶有效 App Check 權杖（來自本網站）的呼叫；模擬器不強制
-export const api = onCall({ enforceAppCheck: process.env.ENFORCE_APP_CHECK === "true", timeoutSeconds: 120, memory: "512MiB" }, async (req: CallableRequest<{ op?: string; input?: unknown }>) => {
+export const api = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 120, memory: "512MiB" }, async (req: CallableRequest<{ op?: string; input?: unknown }>) => {
   const auth = req.auth;
   if (!auth) throw new HttpsError("unauthenticated", "請先登入");
   const opName = String(req.data?.op ?? "");
