@@ -1,19 +1,18 @@
 import Decimal from "decimal.js";
-import { Prisma } from "@prisma/client";
 
 // 所有金額、重量最終計算使用 decimal.js，避免浮點誤差。
 Decimal.set({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
 
-export type Num = Decimal | Prisma.Decimal | number | string;
+export type Num = Decimal | number | string;
 
 export const D = (v: Num | null | undefined): Decimal => new Decimal(v == null ? 0 : v.toString());
 
 export const ZERO = new Decimal(0);
 
-/** 轉為 Prisma Decimal 寫入資料庫 */
-export const toDb = (v: Num, dp?: number): Prisma.Decimal => {
+/** 轉為儲存用字串（Firestore 以字串保存十進位數，避免浮點誤差） */
+export const toDb = (v: Num, dp?: number): string => {
   const d = D(v);
-  return new Prisma.Decimal((dp == null ? d : d.toDecimalPlaces(dp)).toString());
+  return (dp == null ? d : d.toDecimalPlaces(dp)).toFixed(dp ?? undefined);
 };
 
 export const money = (v: Num) => D(v).toDecimalPlaces(2);

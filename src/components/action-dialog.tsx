@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode } from "react";
-import type { ActionResult } from "@/server/action";
+import type { ActionResult } from "@/lib/action-result";
 import { toast } from "./toast";
 import { Button, buttonClass, cn } from "./ui";
 

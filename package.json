@@ -4,22 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "db:local": "node scripts/local-db.mjs start",
-    "db:local:stop": "node scripts/local-db.mjs stop",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
-    "admin:create": "tsx scripts/create-admin.ts",
-    "test": "vitest run",
+    "test": "firebase emulators:exec --only firestore,auth,storage --project demo-ata-coffee \"vitest run\"",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "backup": "node scripts/backup.mjs",
-    "db:reset-dev": "dotenv -e .env -- node scripts/reset-dev.mjs"
+    "functions:build": "esbuild functions/src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=functions/lib/index.js --external:firebase-admin --external:firebase-functions --log-level=warning"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -27,12 +19,11 @@
     "@fontsource/noto-sans-tc": "^5.3.1",
     "@fontsource/noto-serif-tc": "^5.3.1",
     "@hookform/resolvers": "^5.9.2",
-    "@prisma/client": "^6.19.3",
-    "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "decimal.js": "^10.6.0",
     "echarts": "^6.1.0",
+    "firebase": "^13.4.0",
     "lucide-react": "^1.77.0",
     "next": "15.5.6",
     "papaparse": "^5.7.1",
@@ -40,12 +31,12 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.92.0",
-    "server-only": "^0.0.1",
     "tailwind-merge": "^3.7.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@playwright/test": "1.56",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -54,17 +45,15 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
-    "dotenv-cli": "^11.1.0",
-    "embedded-postgres": "^17.12.0-beta.19",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "15.5.6",
-    "prisma": "^6.19.3",
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0",
+    "firebase-tools": "^15.37.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.7"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   }
 }
