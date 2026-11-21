@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-ata-coffee"
+    "default": "demo-ata-coffee",
+    "prod": "ata-coffee"
   }
 }
