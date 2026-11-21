@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.env.*
+storage
+storage-test
+backups
+playwright-report
+test-results
+tests/e2e/.auth
+.git
+.claude

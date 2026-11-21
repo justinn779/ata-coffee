@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+/* ───────── ATA Coffee Design Tokens ─────────
+   Ivory #F7F3EC · Cream #EDE3D5 · Coffee Brown #795A43 · Dark Espresso #34271F · Sage #879486 · Muted Gold #B69A72
+   對比度：前景文字 espresso on ivory ≈ 13:1；muted 文字 ≈ 5.6:1（皆符合 WCAG AA） */
+:root {
+  --bg: #f7f3ec;
+  --surface: #fffdf9;
+  --surface-2: #efe7db;
+  --border: #e1d5c4;
+  --border-strong: #cbb9a2;
+  --fg: #34271f;
+  --muted: #6b5747;
+  --primary: #795a43;
+  --primary-fg: #fffdf9;
+  --primary-soft: #ede3d5;
+  --accent: #b69a72;
+  --sage: #5f6d5e;
+  --sage-soft: #e3e8e1;
+  --danger: #a3402f;
+  --danger-soft: #f6e1dc;
+  --warning: #8a6416;
+  --warning-soft: #f6ebd2;
+  --info: #3f5f7a;
+  --info-soft: #e0e8ef;
+  --ring: #b69a72;
+  --chart-1: #795a43;
+  --chart-2: #879486;
+  --chart-3: #b69a72;
+  --chart-4: #3f5f7a;
+  --chart-5: #a3402f;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1c1612;
+    --surface: #241c17;
+    --surface-2: #2e241d;
+    --border: #3d3027;
+    --border-strong: #574538;
+    --fg: #f2ebe1;
+    --muted: #bfae9b;
+    --primary: #c9a27e;
+    --primary-fg: #1c1612;
+    --primary-soft: #3a2d23;
+    --accent: #c8ad84;
+    --sage: #a8b5a6;
+    --sage-soft: #26302a;
+    --danger: #e08a77;
+    --danger-soft: #3a211b;
+    --warning: #e0bb6a;
+    --warning-soft: #342a16;
+    --info: #9dbad3;
+    --info-soft: #1d2a35;
+    --ring: #c8ad84;
+    --chart-1: #c9a27e;
+    --chart-2: #a8b5a6;
+    --chart-3: #e0c79e;
+    --chart-4: #9dbad3;
+    --chart-5: #e08a77;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1c1612;
+  --surface: #241c17;
+  --surface-2: #2e241d;
+  --border: #3d3027;
+  --border-strong: #574538;
+  --fg: #f2ebe1;
+  --muted: #bfae9b;
+  --primary: #c9a27e;
+  --primary-fg: #1c1612;
+  --primary-soft: #3a2d23;
+  --accent: #c8ad84;
+  --sage: #a8b5a6;
+  --sage-soft: #26302a;
+  --danger: #e08a77;
+  --danger-soft: #3a211b;
+  --warning: #e0bb6a;
+  --warning-soft: #342a16;
+  --info: #9dbad3;
+  --info-soft: #1d2a35;
+  --ring: #c8ad84;
+  --chart-1: #c9a27e;
+  --chart-2: #a8b5a6;
+  --chart-3: #e0c79e;
+  --chart-4: #9dbad3;
+  --chart-5: #e08a77;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-sage: var(--sage);
+  --color-sage-soft: var(--sage-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-ring: var(--ring);
+  --font-sans: "Inter Variable", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --radius-card: 14px;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
