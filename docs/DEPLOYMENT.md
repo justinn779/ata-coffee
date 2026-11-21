@@ -1,5 +1,12 @@
 # 部署（GitHub Pages ＋ Firebase）
 
+## 目前部署狀態
+
+- 網站：https://justinn779.github.io/ata-coffee/ （推送到 main 且測試通過後自動更新）
+- Firebase 專案：`ata-coffee`（Blaze）；Firestore asia-east1、每日排程備份；Functions asia-east1；Storage 預設 bucket
+- 更新後端：`npm run functions:build` 後執行 `npx firebase deploy --only firestore,storage,functions --project ata-coffee`
+- 尚未設定：預算提醒（建議在 Firebase「用量與帳單」設定）
+
 ## 費用
 
 - **GitHub Pages**：公開儲存庫免費。
