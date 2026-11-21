@@ -16,7 +16,7 @@ export default function OrdersPage() {
   const rows = o.data.filter((x) => (pay === "open" ? ["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus) && x.fulfillmentStatus !== "CANCELLED" : ful ? x.fulfillmentStatus === ful : true));
   return (
     <>
-      <PageHeader title="訂單管理" description="付款狀態與履約狀態分開管理；建立訂單時即保留成品（不可超賣）" actions={<LinkButton href="/orders/new/">＋ 建立手動訂單</LinkButton>} />
+      <PageHeader title="訂單管理" description="付款狀態與履約狀態分開管理；建立訂單時即保留成品（不可超賣）" actions={<><LinkButton href="/print/orders/?status=READY_TO_SHIP&type=picking" variant="outline">列印揀貨單</LinkButton><LinkButton href="/print/orders/?status=READY_TO_SHIP" variant="outline">列印可出貨訂單</LinkButton><LinkButton href="/orders/new/">＋ 建立手動訂單</LinkButton></>} />
       <Tabs
         active={pay === "open" ? "pay" : (ful ?? "all")}
         tabs={[

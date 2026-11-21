@@ -140,3 +140,24 @@ body {
     animation: none !important;
   }
 }
+
+/* 列印：出貨單／揀貨單、商品標籤 */
+@page {
+  size: A4;
+  margin: 10mm;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .print-page {
+    break-after: page;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .print-page:last-child {
+    break-after: auto;
+  }
+}

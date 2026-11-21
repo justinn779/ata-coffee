@@ -2,12 +2,14 @@
  * Cloud Functions 進入點（區域 asia-east1，臺灣）。
  *  - api：Callable，管理後台所有寫入與報表；伺服器端驗證 Firebase Auth 與管理員名單
  *  - storefront：HTTP，未來官網（伺服器對伺服器，API 金鑰）
+ *  - dailyDigest：每天 08:30（臺北）寄送每日彙整到 Telegram／Email
  */
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, onRequest, type CallableRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineBoolean, defineString } from "firebase-functions/params";
 import { z } from "zod";
 import { DomainError, errorMessage } from "../../src/lib/errors";
@@ -17,6 +19,7 @@ import { runTx, nowIso } from "./tx";
 import { C } from "./types";
 import { claimFirstAdmin, hashApiKey } from "./domain/master";
 import { createOrder } from "./domain/orders";
+import { notifyAfterOp, sendDailySummary } from "./notify/notify";
 
 initializeApp();
 const db = getFirestore();
@@ -124,10 +127,17 @@ export const storefront = onRequest({ cors: false, timeoutSeconds: 60 }, async (
         }
         return createOrder(t, { channel: "WEB", externalRef: b.externalRef, idempotencyKey: `web:${idem}`, customerName: b.customer.name, customerPhone: b.customer.phone, customerEmail: b.customer.email, shippingAddress: b.customer.address, shippingMethod: b.shippingMethod, shippingFee: b.shippingFee ?? 0, note: b.note, items: b.items.map((it, i) => ({ variantId: ids[i], quantity: it.quantity })) }, { userId: null, name: `API ${key.prefix}` });
       });
+      await notifyAfterOp({ db }, "order.create", {}, { id: r.order.id, duplicate: r.duplicate });
       return void res.status(r.duplicate ? 200 : 201).json({ orderNo: r.order.orderNo, total: r.order.total, paymentStatus: r.order.paymentStatus, fulfillmentStatus: r.order.fulfillmentStatus, duplicate: r.duplicate });
     }
     res.status(404).json({ error: "Not found" });
   } catch (e) {
     res.status(e instanceof DomainError ? e.status : 500).json({ error: errorMessage(e) });
   }
+});
+
+// ── 每日彙整（每天 08:30 臺北時間） ──
+export const dailyDigest = onSchedule({ schedule: "30 8 * * *", timeZone: "Asia/Taipei", timeoutSeconds: 120, retryCount: 1 }, async () => {
+  const r = await sendDailySummary({ db });
+  console.log("每日彙整", JSON.stringify(r));
 });

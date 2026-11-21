@@ -69,6 +69,11 @@ export default function OrderDetail() {
                     />
                   )}
                   {["PAID", "PARTIALLY_REFUNDED"].includes(x.paymentStatus) && !preShip && <ActionDialog label="記錄退款" variant="ghost" title="記錄退款" payload={{ orderId: x.id }} fields={[{ name: "amount", label: "退款金額", type: "number", required: true }, { name: "reference", label: "參考資訊" }, { name: "note", label: "備註" }]} action={opAction("order.refund")} />}
+                  {x.fulfillmentStatus !== "CANCELLED" && (
+                    <LinkButton href={`/print/orders/?ids=${x.id}`} variant="outline">
+                      列印出貨單
+                    </LinkButton>
+                  )}
                   {preShip && ["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus) && (
                     <LinkButton href={`/orders/new/?edit=${x.id}`} variant="secondary">
                       修改訂單

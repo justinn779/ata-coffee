@@ -20,6 +20,10 @@ import { lossStats, monthlyReport, skuPerformance } from "./domain/reports";
 import { setTracePublished, traceOrder } from "./domain/traceability";
 import { addExperiment, createApiKey, deleteExperiment, deleteResearch, updateExperiment, receiveMaterial, saveProduct, saveVariant, setBaseline, setLotStatus, upsert } from "./domain/master";
 import { saveCurve, sha256 } from "./domain/curves";
+import { MAX_COUNT_LINES, submitStockCount } from "./domain/stockcount";
+import { randomBytes } from "node:crypto";
+import { realChannels, type Channels } from "./notify/channels";
+import { dispatch, getChannels, getNotifySettings, NOTIFY_EVENTS, notifyAfterOp, SECRETS_COL, sendDailySummary } from "./notify/notify";
 import { detectMapping, parseArtisanAlog, parseCsvCurve, preprocessCsv, type ColumnMapping } from "./curves/parse";
 
 export interface OpCtx {
@@ -27,6 +31,8 @@ export interface OpCtx {
   actor: Actor;
   /** 讀取 Cloud Storage 檔案（測試時可替換） */
   readFile?: (path: string) => Promise<{ buf: Buffer; name: string }>;
+  /** 測試用：注入假的通知管道（Telegram／Email） */
+  channels?: Channels;
 }
 
 interface Op<S extends z.ZodTypeAny> {
@@ -245,6 +251,130 @@ export const OPS = {
   "research.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteResearch(t, id, ctx.actor)).then(() => ({ message: "已刪除研究專案" }))),
   "research.setBaseline": op(z.object({ projectId: docId("專案"), expId: reqStr("實驗") }), (i, ctx) => tx(ctx, (t) => setBaseline(t, i.projectId, i.expId, ctx.actor))),
 
+
+  // ── 通知（Telegram／Gmail） ──
+  "notify.save": op(
+    z.object({
+      gmailUser: optEmail(),
+      emailTo: optStr(1000),
+      dailyTelegram: bool(),
+      dailyEmail: bool(),
+      ...Object.fromEntries(NOTIFY_EVENTS.flatMap((e) => [[`tg_${e}`, bool()], [`em_${e}`, bool()]])),
+    }),
+    async (i, ctx) => {
+      const emailTo = [...new Set((i.emailTo ?? "").split(/[,，;\s]+/).map((x) => x.trim()).filter(Boolean))];
+      const bad = emailTo.filter((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+      if (bad.length) throw new DomainError(`收件 Email 格式錯誤：${bad.join("、")}`);
+      if (emailTo.length > 10) throw new DomainError("收件人最多 10 位");
+      const flags = i as unknown as Record<string, boolean>;
+      return tx(ctx, async (t) => {
+        const cur = ((await t.get(C.settings, "notify")) ?? {}) as Record<string, unknown>;
+        t.set(C.settings, "notify", {
+          ...cur,
+          gmailUser: i.gmailUser,
+          emailTo,
+          dailyTelegram: i.dailyTelegram,
+          dailyEmail: i.dailyEmail,
+          tgEvents: Object.fromEntries(NOTIFY_EVENTS.map((e) => [e, flags[`tg_${e}`]])),
+          emailEvents: Object.fromEntries(NOTIFY_EVENTS.map((e) => [e, flags[`em_${e}`]])),
+          // 更換寄件帳號時，原本的應用程式密碼失效
+          ...(cur.gmailUser && cur.gmailUser !== i.gmailUser ? { hasGmailPassword: false } : {}),
+        });
+        if (cur.gmailUser && cur.gmailUser !== i.gmailUser) {
+          const sec = (await t.get(SECRETS_COL, "notify")) ?? {};
+          t.set(SECRETS_COL, "notify", { ...sec, gmailAppPassword: null });
+        }
+        audit(t, ctx.actor, "notify.save", "Settings", "notify", "更新通知設定");
+        return { message: "已儲存通知設定" };
+      });
+    },
+  ),
+  /** 設定金鑰（只寫不讀）：Telegram 機器人金鑰、Gmail 應用程式密碼；儲存前先驗證可用 */
+  "notify.setSecrets": op(z.object({ telegramBotToken: optStr(200), gmailAppPassword: optStr(100), clearTelegram: bool(), clearGmail: bool() }), async (i, ctx) => {
+    const settings = await getNotifySettings(ctx.db);
+    const patch: Record<string, unknown> = {};
+    const sec: Record<string, unknown> = {};
+    if (i.clearTelegram) {
+      sec.telegramBotToken = null;
+      Object.assign(patch, { hasTelegramToken: false, telegramBot: null, telegramChatId: null, telegramChatTitle: null });
+    }
+    if (i.clearGmail) {
+      sec.gmailAppPassword = null;
+      patch.hasGmailPassword = false;
+    }
+    if (i.telegramBotToken) {
+      if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(i.telegramBotToken)) throw new DomainError("Telegram 機器人金鑰格式不正確（應類似 123456789:AAH…，由 @BotFather 提供）");
+      const ch = ctx.channels ?? realChannels({ telegramBotToken: i.telegramBotToken });
+      const me = await ch.telegramMe!();
+      Object.assign(sec, { telegramBotToken: i.telegramBotToken });
+      Object.assign(patch, { hasTelegramToken: true, telegramBot: me.username, ...(settings.telegramBot && settings.telegramBot !== me.username ? { telegramChatId: null, telegramChatTitle: null } : {}) });
+    }
+    if (i.gmailAppPassword) {
+      if (!settings.gmailUser) throw new DomainError("請先填寫並儲存「寄件 Gmail 帳號」");
+      const ch = ctx.channels ?? realChannels({ gmailUser: settings.gmailUser, gmailAppPassword: i.gmailAppPassword });
+      await ch.emailVerify!();
+      Object.assign(sec, { gmailAppPassword: i.gmailAppPassword });
+      Object.assign(patch, { hasGmailPassword: true });
+    }
+    if (!Object.keys(sec).length) throw new DomainError("沒有要更新的項目");
+    await tx(ctx, async (t) => {
+      const cur = (await t.get(SECRETS_COL, "notify")) ?? {};
+      t.set(SECRETS_COL, "notify", { ...cur, ...sec, updatedAt: nowIso() });
+      const st = (await t.get(C.settings, "notify")) ?? {};
+      t.set(C.settings, "notify", { ...st, ...patch });
+      // 稽核只記錄「更新了哪一項」，不記錄金鑰內容
+      audit(t, ctx.actor, "notify.secrets", "Settings", "notify", `更新通知金鑰：${Object.keys(sec).map((k) => ({ telegramBotToken: "Telegram 機器人", gmailAppPassword: "Gmail 應用程式密碼" })[k] ?? k).join("、")}`);
+    });
+    return { message: i.telegramBotToken ? `已連上 Telegram 機器人 @${patch.telegramBot}，下一步請連結聊天室` : "已更新" };
+  }),
+  "notify.linkStart": op(z.object({}), async (_i, ctx) => {
+    const s = await getNotifySettings(ctx.db);
+    if (!s.hasTelegramToken || !s.telegramBot) throw new DomainError("請先設定 Telegram 機器人金鑰");
+    const code = randomBytes(4).toString("hex").toUpperCase();
+    await tx(ctx, async (t) => {
+      const st = (await t.get(C.settings, "notify")) ?? {};
+      t.set(C.settings, "notify", { ...st, linkCode: code, linkCodeAt: nowIso() });
+    });
+    return { code, bot: s.telegramBot, link: `https://t.me/${s.telegramBot}?start=${code}` };
+  }),
+  "notify.linkDetect": op(z.object({}), async (_i, ctx) => {
+    const s = await getNotifySettings(ctx.db);
+    if (!s.linkCode || !s.linkCodeAt || Date.now() - Date.parse(s.linkCodeAt) > 30 * 60_000) throw new DomainError("驗證碼已過期，請重新按「開始連結」");
+    const ch = await getChannels(ctx);
+    if (!ch.telegramUpdates) throw new DomainError("請先設定 Telegram 機器人金鑰");
+    const hit = (await ch.telegramUpdates()).reverse().find((u) => u.text.includes(s.linkCode!));
+    if (!hit) throw new DomainError(`還沒收到驗證碼。請在 Telegram 對 @${s.telegramBot} 傳送「/start ${s.linkCode}」後再按一次`);
+    await tx(ctx, async (t) => {
+      const st = (await t.get(C.settings, "notify")) ?? {};
+      t.set(C.settings, "notify", { ...st, telegramChatId: hit.chatId, telegramChatTitle: hit.title || null, linkCode: null, linkCodeAt: null });
+      audit(t, ctx.actor, "notify.link", "Settings", "notify", `連結 Telegram 聊天室 ${hit.title}`);
+    });
+    await ch.telegram!(hit.chatId, "✅ 已連結 <b>ATA Coffee 管理系統</b>，之後的通知會傳到這裡。");
+    return { message: `已連結 Telegram：${hit.title || hit.chatId}` };
+  }),
+  "notify.unlinkTelegram": op(z.object({}), (_i, ctx) =>
+    tx(ctx, async (t) => {
+      const st = (await t.get(C.settings, "notify")) ?? {};
+      t.set(C.settings, "notify", { ...st, telegramChatId: null, telegramChatTitle: null });
+      audit(t, ctx.actor, "notify.unlink", "Settings", "notify", "解除 Telegram 聊天室");
+      return { message: "已解除 Telegram 聊天室" };
+    }),
+  ),
+  "notify.test": op(z.object({}), async (_i, ctx) => {
+    const r = await dispatch(ctx, "test", { title: "🔔 測試通知", lines: ["這是一則測試訊息，收到代表通知設定成功。"], path: "/settings/?s=notify" }, { force: true });
+    if (!r.length) throw new DomainError("尚未設定任何可用的通知管道（Telegram 聊天室或 Email 收件人）");
+    const fail = r.filter((x) => !x.ok);
+    if (fail.length) throw new DomainError(fail.map((x) => `${x.channel === "telegram" ? "Telegram" : "Email"}：${x.error}`).join("\n"));
+    return { message: `已送出測試通知：${r.map((x) => (x.channel === "telegram" ? "Telegram" : "Email")).join("、")}` };
+  }),
+  "notify.dailyNow": op(z.object({}), async (_i, ctx) => {
+    const r = await sendDailySummary(ctx);
+    if (!r.length) throw new DomainError("每日彙整未啟用任何管道，或尚未設定 Telegram 聊天室／Email 收件人");
+    const fail = r.filter((x) => !x.ok);
+    if (fail.length) throw new DomainError(fail.map((x) => x.error).join("\n"));
+    return { message: "已送出今日彙整" };
+  }),
+
   // ── 庫存 ──
   "inventory.adjust": op(
     z.object({ lotId: docId("批次"), type: enumList(MANUAL_TX_TYPES, "異動類型"), direction: z.enum(["out", "in"]).default("out"), quantity: reqDec("數量", { positive: true }), note: optStr(500), idempotencyKey: z.string().max(100).optional() }),
@@ -252,6 +382,17 @@ export const OPS = {
       const q = D(i.quantity);
       await tx(ctx, (t) => manualAdjust(t, { lotId: i.lotId, type: i.type, quantity: i.type === "ADJUSTMENT" && i.direction === "in" ? q : q.neg(), note: i.note, actor: ctx.actor, idempotencyKey: i.idempotencyKey }));
       return { message: "庫存異動已過帳" };
+    },
+  ),
+  "inventory.count": op(
+    z.object({
+      countId: reqStr("盤點識別碼", 100),
+      note: optStr(500),
+      lines: z.array(z.object({ lotId: docId("批次"), expected: reqDec("帳面數量", { min: 0 }), counted: reqDec("實盤數量", { min: 0 }) })).min(1, "請至少輸入一個批次的實盤數量").max(MAX_COUNT_LINES, `一次最多盤點 ${MAX_COUNT_LINES} 個批次`),
+    }),
+    async (i, ctx) => {
+      const r = await tx(ctx, (t) => submitStockCount(t, i, ctx.actor));
+      return { id: r.count.id, duplicate: r.duplicate, message: r.duplicate ? "此盤點已送出過，未重複調整" : `盤點 ${r.count.code} 完成：${r.count.changedCount} 批有差異` };
     },
   ),
   "inventory.reverse": op(z.object({ txId: docId("交易"), note: reqStr("沖銷原因") }), (i, ctx) => tx(ctx, (t) => reverseTransaction(t, i.txId, ctx.actor, i.note)).then(() => ({ message: "已建立沖銷交易（原交易保留）" }))),
@@ -460,5 +601,8 @@ export async function runOp(name: string, raw: unknown, ctx: OpCtx) {
     Object.assign(e, { fieldErrors });
     throw e;
   }
-  return def.run(parsed.data, ctx);
+  const result = await def.run(parsed.data, ctx);
+  // 業務操作完成後的即時通知（盡力而為，失敗不影響操作結果）
+  await notifyAfterOp(ctx, name, parsed.data as Record<string, unknown>, result);
+  return result;
 }

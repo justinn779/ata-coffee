@@ -29,6 +29,8 @@ beforeEach(async () => {
     await setDoc(doc(db, "orders/o1"), { customerName: "王小明", customerPhone: "0912" });
     await setDoc(doc(db, "publicTraces/pub1"), { published: true, batchNo: "PK-1" });
     await setDoc(doc(db, "publicTraces/hidden"), { published: false, batchNo: "PK-2" });
+    await setDoc(doc(db, "secrets/notify"), { telegramBotToken: "123:secret" });
+    await setDoc(doc(db, "roastCurves/c1/chunks/0"), { points: [] });
   });
 });
 
@@ -40,6 +42,13 @@ describe("Firestore 規則", () => {
   it("管理員可讀取後台資料", async () => {
     await assertSucceeds(getDoc(doc(admin(), "invLots/lot1")));
     await assertSucceeds(getDocs(collection(admin(), "orders")));
+  });
+  it("通知金鑰：管理員也不能從瀏覽器讀取或修改；子集合（曲線資料）仍可讀", async () => {
+    await assertFails(getDoc(doc(admin(), "secrets/notify")));
+    await assertFails(getDocs(collection(admin(), "secrets")));
+    await assertFails(setDoc(doc(admin(), "secrets/notify"), { telegramBotToken: "x" }));
+    await assertFails(getDoc(doc(anon(), "secrets/notify")));
+    await assertSucceeds(getDocs(collection(admin(), "roastCurves/c1/chunks")));
   });
   it("未登入與非管理員不可讀取任何後台資料（含顧客個資）", async () => {
     await assertFails(getDoc(doc(anon(), "orders/o1")));

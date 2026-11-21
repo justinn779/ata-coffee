@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, doc, onSnapshot, query, where, type QueryConstraint } from "firebase/firestore";
+import { collection, doc, documentId, onSnapshot, query, where, type QueryConstraint } from "firebase/firestore";
 import { fb } from "./firebase";
 
 export type Row = Record<string, any> & { id: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -86,6 +86,35 @@ export function useOp<T>(op: string | null, input: unknown) {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state;
+}
+
+/** 一次讀取多個值的資料（field in values；Firestore 每次最多 30 個值，自動分批）。field 為 "__id" 時依文件 id 讀取 */
+export function useWhereIn(col: string | null, field: string, values: string[]) {
+  const key = JSON.stringify([col, field, values]);
+  const [state, setState] = useState<{ data: Row[]; loading: boolean; error: string | null }>({ data: [], loading: !!col, error: null });
+  useEffect(() => {
+    if (!col || !values.length) {
+      setState({ data: [], loading: false, error: null });
+      return;
+    }
+    setState((s) => ({ ...s, loading: true }));
+    const chunks: string[][] = [];
+    for (let i = 0; i < values.length; i += 30) chunks.push(values.slice(i, i + 30));
+    const parts = new Map<number, Row[]>();
+    const unsubs = chunks.map((c, idx) =>
+      onSnapshot(
+        query(collection(fb().db, col), where(field === "__id" ? documentId() : field, "in", c)),
+        (snap) => {
+          parts.set(idx, snap.docs.map((d) => ({ ...d.data(), id: d.id }) as Row));
+          if (parts.size === chunks.length) setState({ data: [...parts.values()].flat(), loading: false, error: null });
+        },
+        (err) => setState({ data: [], loading: false, error: err.code === "permission-denied" ? "沒有讀取權限" : err.message }),
+      ),
+    );
+    return () => unsubs.forEach((u) => u());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return state;

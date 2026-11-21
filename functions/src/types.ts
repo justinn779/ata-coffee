@@ -45,6 +45,8 @@ export const C = {
   publicTraces: "publicTraces",
   brandAssets: "brandAssets",
   apiKeys: "apiKeys",
+  stockCounts: "stockCounts",
+  notifyLog: "notifyLog",
 } as const;
 
 export type InventoryKind = "GREEN" | "ROASTED" | "FINISHED" | "MATERIAL";

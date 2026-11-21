@@ -48,6 +48,9 @@ export default function InventoryPage() {
         description="在庫 = 帳本加總；可用 = 在庫 − 保留。所有異動皆寫入不可修改的庫存帳本。"
         actions={
           <>
+            <LinkButton href={`/inventory/count/?kind=${kind}`} variant="outline">
+              整批盤點
+            </LinkButton>
             <LinkButton href="/inventory/ledger/" variant="outline">
               庫存帳本
             </LinkButton>

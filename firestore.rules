@@ -2,6 +2,7 @@ rules_version = '2';
 // ATA Coffee — Firestore 安全規則
 //  * 所有寫入（庫存、訂單、成本、主檔、稽核）只能由 Cloud Functions（Admin SDK）執行；用戶端一律禁止寫入。
 //  * 只有 admins/{uid} 名單中的登入者可以讀取後台資料。
+//  * secrets（通知金鑰）任何用戶端都不能讀寫。
 //  * publicTraces（QR 商品履歷）只公開「已發布」的文件，且只能逐筆讀取，不能列出全部。
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -20,8 +21,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /{document=**} {
-      allow read: if isAdmin();
+    // 通知金鑰（Telegram 機器人金鑰、Gmail 應用程式密碼）：只有 Cloud Functions 可存取，管理員也不能從瀏覽器讀取
+    match /secrets/{id} {
+      allow read, write: if false;
+    }
+
+    match /{col}/{document=**} {
+      allow read: if isAdmin() && col != "secrets";
       allow write: if false;
     }
   }
