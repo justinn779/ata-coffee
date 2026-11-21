@@ -41,7 +41,8 @@ async function readFile(path: string) {
   return { buf, name: path.split("/").pop()! };
 }
 
-export const api = onCall({ enforceAppCheck: false, timeoutSeconds: 120, memory: "512MiB" }, async (req: CallableRequest<{ op?: string; input?: unknown }>) => {
+// App Check：正式環境於 functions/.env.<專案> 設定 ENFORCE_APP_CHECK=true，只接受帶有效 App Check 權杖（來自本網站）的呼叫；模擬器不強制
+export const api = onCall({ enforceAppCheck: process.env.ENFORCE_APP_CHECK === "true", timeoutSeconds: 120, memory: "512MiB" }, async (req: CallableRequest<{ op?: string; input?: unknown }>) => {
   const auth = req.auth;
   if (!auth) throw new HttpsError("unauthenticated", "請先登入");
   const opName = String(req.data?.op ?? "");

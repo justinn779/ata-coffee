@@ -11,3 +11,6 @@ export const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "995684412455",
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:995684412455:web:8c0c6c52f8527fe06e3202",
 };
+
+/** App Check 用的 reCAPTCHA Enterprise 網站金鑰（公開資訊；僅限 justinn779.github.io 網域可用） */
+export const appCheckSiteKey = process.env.NEXT_PUBLIC_APPCHECK_SITE_KEY || "6LeadCsuAAAAAIuu5o6NtHQnIT0QKorAfTHsc-4R";

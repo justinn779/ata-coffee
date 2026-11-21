@@ -7,6 +7,14 @@
 - 更新後端：`npm run functions:build` 後執行 `npx firebase deploy --only firestore,storage,functions --project ata-coffee`
 - 尚未設定：預算提醒（建議在 Firebase「用量與帳單」設定）
 
+## 登入方式與 App Check
+
+- 登入方式：電子郵件／密碼、Google（Firebase Authentication → 登入方式）。授權網域需包含 `justinn779.github.io`
+- 管理員權限一律以 Firestore `admins/{uid}` 判斷；Google 帳號需由管理員在「系統設定 → 個人帳號」綁定（同一 uid）才有權限
+- App Check：網頁應用程式已用 reCAPTCHA Enterprise 註冊（網站金鑰為公開資訊，位於 `src/lib/firebase-config.ts`，限 justinn779.github.io 網域）
+- 強制驗證：`functions/.env.ata-coffee` 設定 `ENFORCE_APP_CHECK=true` 後重新部署 Functions；模擬器不強制
+- 若網域變更，需同時更新 reCAPTCHA 金鑰的網域清單與 Firebase 授權網域，否則網站將無法呼叫後端
+
 ## 費用
 
 - **GitHub Pages**：公開儲存庫免費。

@@ -1,11 +1,12 @@
 "use client";
 
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore, type Firestore } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, type Functions } from "firebase/functions";
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
-import { firebaseConfig } from "./firebase-config";
+import { appCheckSiteKey, firebaseConfig } from "./firebase-config";
 
 /**
  * Firebase 用戶端初始化。網頁設定值（apiKey 等）依 Firebase 設計本來就是公開的；
@@ -19,6 +20,10 @@ let cached: { app: FirebaseApp; auth: Auth; db: Firestore; fns: Functions; stora
 export function fb() {
   if (cached) return cached;
   const app = getApps().length ? getApp() : initializeApp(useEmulators ? { ...firebaseConfig, projectId: "demo-ata-coffee", apiKey: "demo-key", storageBucket: "demo-ata-coffee.appspot.com" } : firebaseConfig);
+  // App Check：證明呼叫來自本網站（reCAPTCHA Enterprise，背景執行、使用者看不到驗證題）。模擬器環境不啟用。
+  if (!useEmulators && appCheckSiteKey && typeof window !== "undefined") {
+    initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+  }
   const auth = getAuth(app);
   const db = getFirestore(app);
   const fns = getFunctions(app, "asia-east1");
