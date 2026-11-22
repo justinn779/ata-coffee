@@ -50,7 +50,7 @@ export default function NewOrderPage() {
               {x ? (
                 <Notice>儲存時會先釋放原本保留的庫存、取消未完成的接單後分裝單，再依新內容重新保留（FIFO）。原有品項沿用下單時單價，新增品項使用目前售價。庫存不足時修改不會生效，原訂單維持不變。</Notice>
               ) : (
-                <Notice>建立時立即保留現貨成品（依效期 FIFO 分配批次）；「可接單後分裝」的 SKU 若現貨不足，會自動建立分裝單並預留單一熟豆批次。庫存不足時訂單不會成立。</Notice>
+                <Notice>建立時立即保留現貨成品（依效期 FIFO 分配批次）；「可接單後分裝」的品項 若現貨不足，會自動建立分裝單並預留單一熟豆批次。庫存不足時訂單不會成立。</Notice>
               )}
             </div>
             <EntityForm
@@ -71,7 +71,7 @@ export default function NewOrderPage() {
                 { name: "customerPhone", label: "電話", section: "a" },
                 { name: "customerEmail", label: "Email", type: "email", section: "a" },
                 { name: "shippingAddress", label: "收件地址", section: "a", wide: true },
-                { name: "items", label: "訂購品項", type: "array", section: "b", addLabel: "新增品項", newItem: { quantity: "1" }, itemFields: [{ name: "variantId", label: "商品 SKU", type: "select", required: true, options: variants }, { name: "quantity", label: "數量", type: "number", required: true }, { name: "discount", label: "折扣金額", type: "number", unit: "TWD" }] },
+                { name: "items", label: "訂購品項", type: "array", section: "b", addLabel: "新增品項", newItem: { quantity: "1" }, itemFields: [{ name: "variantId", label: "商品品項", type: "select", required: true, options: variants }, { name: "quantity", label: "數量", type: "number", required: true }, { name: "discount", label: "折扣金額", type: "number", unit: "TWD" }] },
                 { name: "shippingMethod", label: "配送方式", section: "c" },
                 { name: "shippingFee", label: "向顧客收取運費", type: "number", unit: "TWD", section: "c" },
                 { name: "note", label: "訂單備註", type: "textarea", wide: true, section: "c" },

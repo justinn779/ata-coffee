@@ -61,7 +61,7 @@ export function VariantForm({ productId, initial }: { productId: string; initial
   return (
     <EntityForm
       key={`${materials.data.length}-${variants.length}`}
-      submitLabel={initial ? "儲存 SKU" : "建立 SKU"}
+      submitLabel={initial ? "儲存品項" : "建立品項"}
       defaultValues={{ productId, ...d }}
       sections={[
         { key: "a", title: "規格與價格", description: "售價由伺服器端讀取，訂單成立後保存價格快照" },
@@ -71,7 +71,7 @@ export function VariantForm({ productId, initial }: { productId: string; initial
       fields={[
         { name: "id", label: "", type: "hidden" },
         { name: "productId", label: "", type: "hidden" },
-        { name: "sku", label: "SKU", required: true, section: "a" },
+        { name: "sku", label: "品項編號", required: true, section: "a" },
         { name: "name", label: "規格名稱", required: true, placeholder: "例：200g 咖啡豆", section: "a" },
         { name: "listPrice", label: "原價", type: "number", unit: "TWD", required: true, section: "a" },
         { name: "salePrice", label: "售價", type: "number", unit: "TWD", required: true, section: "a" },
@@ -79,9 +79,9 @@ export function VariantForm({ productId, initial }: { productId: string; initial
         { name: "fillWeightG", label: "每包填充重量", type: "number", unit: "g", section: "a" },
         { name: "stockPolicy", label: "庫存政策", type: "select", required: true, options: opts(STOCK_POLICY), section: "a" },
         { name: "status", label: "狀態", type: "select", required: true, options: opts(PRODUCT_STATUS), section: "a" },
-        { name: "isBundle", label: "此 SKU 為套組／禮盒", type: "checkbox", section: "a" },
+        { name: "isBundle", label: "此品項 為套組／禮盒", type: "checkbox", section: "a" },
         { name: "materials", label: "包材", type: "array", section: "b", addLabel: "新增包材", itemFields: [{ name: "materialId", label: "包材", type: "select", required: true, options: materials.data.map((m) => ({ value: m.id, label: `${m.code}｜${m.name}` })) }, { name: "quantityPerUnit", label: "每件用量", type: "number", required: true }] },
-        { name: "components", label: "組件", type: "array", section: "c", addLabel: "新增組件", itemFields: [{ name: "componentVariantId", label: "組件 SKU", type: "select", required: true, options: variants.filter((v) => v.value !== initial?.id) }, { name: "quantity", label: "數量", type: "number", required: true }] },
+        { name: "components", label: "組件", type: "array", section: "c", addLabel: "新增組件", itemFields: [{ name: "componentVariantId", label: "組件品項", type: "select", required: true, options: variants.filter((v) => v.value !== initial?.id) }, { name: "quantity", label: "數量", type: "number", required: true }] },
       ]}
       action={opAction("variant.save", undefined, () => `/products/view/?id=${productId}`)}
     />

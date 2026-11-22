@@ -115,7 +115,7 @@ function PackingSlip({ order: o, items, allocs, showPrice, vname }: { order: Row
         <thead>
           <tr>
             <th className={th + " w-8"}>✓</th>
-            <th className={th}>SKU</th>
+            <th className={th}>品項編號</th>
             <th className={th}>品名</th>
             <th className={th}>批號</th>
             <th className={th + " text-right"}>數量</th>
@@ -202,7 +202,7 @@ function PickingList({ orders, items, allocs, vname }: { orders: Row[]; items: R
         <thead>
           <tr>
             <th className={th + " w-8"}>✓</th>
-            <th className={th}>SKU</th>
+            <th className={th}>品項編號</th>
             <th className={th}>品名</th>
             <th className={th}>批號</th>
             <th className={th + " text-right"}>數量</th>

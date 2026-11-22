@@ -41,7 +41,7 @@ export default function SeriesDetail() {
             <Card>
               <CardHeader title="QR Code 商品履歷" description="每個包裝批次一個公開代碼；公開頁只顯示咖啡豆介紹、產區處理法、烘焙日期、風味、推薦沖煮與批次編號，不含成本、研發備註或顧客資料" />
               <SimpleTable
-                head={["QR", "包裝批次", "SKU", "建立時間", "狀態", ""]}
+                head={["QR", "包裝批次", "品項編號", "建立時間", "狀態", ""]}
                 rows={mine.map((t) => {
                   const url = `${origin}${basePath}/t/?c=${t.publicCode}`;
                   return [

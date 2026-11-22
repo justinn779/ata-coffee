@@ -21,7 +21,7 @@ export default function ProductionPage() {
               { key: "no", label: "生產單", sortable: true },
               { key: "status", label: "狀態" },
               { key: "mode", label: "類型", hideOnMobile: true },
-              { key: "sku", label: "目標 SKU" },
+              { key: "sku", label: "目標品項" },
               { key: "src", label: "熟豆批次", hideOnMobile: true },
               { key: "qty", label: "數量（計畫／實際）", align: "right" },
               { key: "beans", label: "耗豆", align: "right", hideOnMobile: true },

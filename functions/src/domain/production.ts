@@ -26,7 +26,7 @@ export interface CreateProductionInput {
 
 export async function createProductionOrder(tx: Tx, input: CreateProductionInput, actor: Actor) {
   if (!Number.isInteger(input.plannedQty) || input.plannedQty <= 0) throw new DomainError("預計生產數量必須為正整數");
-  const variant = await tx.must(C.variants, input.targetVariantId, "目標 SKU");
+  const variant = await tx.must(C.variants, input.targetVariantId, "目標品項");
   if (variant.isBundle) throw new DomainError("套組不需分裝，請分裝其組件單品");
   const fill = D((input.fillWeightG as string) || (variant.fillWeightG as string) || 0);
   if (fill.lte(0)) throw new DomainError("請設定每包填充重量");
@@ -83,7 +83,7 @@ export async function completeProductionOrder(tx: Tx, productionOrderId: string,
   if (po.mode === "MADE_TO_ORDER" && input.actualQty < (po.plannedQty as number)) throw new DomainError("接單後分裝的實際數量不可少於訂單所需數量");
   const loss = D(input.lossG ?? 0);
   if (loss.isNegative()) throw new DomainError("損耗不可為負");
-  const variant = await tx.must(C.variants, po.targetVariantId as string, "目標 SKU");
+  const variant = await tx.must(C.variants, po.targetVariantId as string, "目標品項");
   const src = await tx.must<InvLot>(C.lots, po.sourceLotId as string, "熟豆批次");
   const resv = (await tx.query<Reservation>(C.reservations, [["productionOrderId", "==", po.id]])).filter((r) => r.status === "ACTIVE");
   if (resv.length !== 1) throw new InvalidStateError("生產單熟豆預留狀態異常");

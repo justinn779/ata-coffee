@@ -54,7 +54,7 @@ export async function setTracePublished(tx: Tx, traceId: string, publish: boolea
   }
   const pkg = await tx.must(C.packagingBatches, t.packagingBatchId as string, "包裝批次");
   const po = await tx.must(C.productionOrders, pkg.productionOrderId as string, "生產單");
-  const variant = await tx.must(C.variants, po.targetVariantId as string, "SKU");
+  const variant = await tx.must(C.variants, po.targetVariantId as string, "品項");
   const product = await tx.must(C.products, variant.productId as string, "商品");
   const series = product.brandSeriesId ? await tx.get(C.series, product.brandSeriesId as string) : null;
   const recipe = series?.recommendedRecipeId ? await tx.get(C.brewRecipes, series.recommendedRecipeId as string) : null;

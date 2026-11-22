@@ -92,7 +92,7 @@ export default function OrderDetail() {
               <div className="grid gap-6 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                   <CardHeader title="訂單明細" description="單價、商品名稱與成本均為快照，不隨日後價格變動" />
-                  <SimpleTable head={["SKU", "商品", "數量", "單價", "折扣", "小計", "稅額", "成本快照", "履約方式"]} rows={items.data.map((it) => [it.skuSnapshot, it.nameSnapshot, it.quantity, fmtMoney(it.unitPriceSnapshot), fmtMoney(it.discount), fmtMoney(it.lineTotal), fmtMoney2(it.taxAmount), fmtMoney2(it.costSnapshot), it.fulfillmentMode === "MADE_TO_ORDER" ? <Badge key="m" tone="warning">接單後分裝</Badge> : it.fulfillmentMode === "NOT_TRACKED" ? "不追蹤" : it.isBundle ? "套組現貨" : "現貨"])} />
+                  <SimpleTable head={["品項編號", "商品", "數量", "單價", "折扣", "小計", "稅額", "成本快照", "履約方式"]} rows={items.data.map((it) => [it.skuSnapshot, it.nameSnapshot, it.quantity, fmtMoney(it.unitPriceSnapshot), fmtMoney(it.discount), fmtMoney(it.lineTotal), fmtMoney2(it.taxAmount), fmtMoney2(it.costSnapshot), it.fulfillmentMode === "MADE_TO_ORDER" ? <Badge key="m" tone="warning">接單後分裝</Badge> : it.fulfillmentMode === "NOT_TRACKED" ? "不追蹤" : it.isBundle ? "套組現貨" : "現貨"])} />
                   <CardBody className="border-t border-border">
                     <KV cols={4} items={[["商品小計", fmtMoney(x.subtotal)], ["折扣合計", fmtMoney(x.discountTotal)], [`稅額（${x.taxMode === "INCLUSIVE" ? "內含" : x.taxMode === "EXCLUSIVE" ? "外加" : "不計"} ${fmtNum(D(x.taxRate).mul(100), 1)}%）`, fmtMoney2(x.taxTotal)], ["運費收入", fmtMoney(x.shippingFee)], ["訂單總額", <b key="t">{fmtMoney(x.total)}</b>], ["已退款", fmtMoney(x.refundedTotal)]]} />
                   </CardBody>
@@ -106,7 +106,7 @@ export default function OrderDetail() {
               </div>
               <Card>
                 <CardHeader title="庫存批次分配" description="出貨時依此明確分配的批次扣帳" />
-                <SimpleTable head={["SKU", "成品批次", "數量", "每件成本", "狀態"]} rows={allocs.data.map((a) => [a.sku, <A key="l" href={`/inventory/lot/?id=${a.lotId}`}>{a.lotCode}</A>, fmtNum(a.quantity, 0), fmtMoney2(a.unitCost), a.status === "RESERVED" ? <Badge key="s" tone="warning">已保留</Badge> : a.status === "SHIPPED" ? <Badge key="s" tone="sage">已出貨</Badge> : <Badge key="s">已釋放</Badge>])} empty="尚未分配批次" />
+                <SimpleTable head={["品項編號", "成品批次", "數量", "每件成本", "狀態"]} rows={allocs.data.map((a) => [a.sku, <A key="l" href={`/inventory/lot/?id=${a.lotId}`}>{a.lotCode}</A>, fmtNum(a.quantity, 0), fmtMoney2(a.unitCost), a.status === "RESERVED" ? <Badge key="s" tone="warning">已保留</Badge> : a.status === "SHIPPED" ? <Badge key="s" tone="sage">已出貨</Badge> : <Badge key="s">已釋放</Badge>])} empty="尚未分配批次" />
               </Card>
               <div className="grid gap-6 lg:grid-cols-2">
                 <Card>
@@ -137,7 +137,7 @@ export default function OrderDetail() {
                 <Card>
                   <CardHeader title="退貨" description="待檢庫存不計入可售；檢查後選擇重新入庫或報廢" />
                   <SimpleTable
-                    head={["退貨單", "SKU／原批次", "數量", "原因", "狀態", ""]}
+                    head={["退貨單", "品項編號／原批次", "數量", "原因", "狀態", ""]}
                     rows={rets.data.flatMap((r) =>
                       (r.items as Row[]).map((ri) => [
                         r.returnNo,
@@ -159,7 +159,7 @@ export default function OrderDetail() {
                 </Card>
               )}
               <Card>
-                <CardHeader title="批次追溯" description="訂單 → SKU → 包裝批次 → 烘焙批次 → 生豆採購批次（不含顧客個資）" />
+                <CardHeader title="批次追溯" description="訂單 → 品項 → 包裝批次 → 烘焙批次 → 生豆採購批次（不含顧客個資）" />
                 <CardBody className="space-y-3">
                   {trace.loading && <p className="text-sm text-muted">追溯計算中…</p>}
                   {trace.data?.chains.map((c, i) => (

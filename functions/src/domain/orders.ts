@@ -106,7 +106,7 @@ async function priceLines(tx: Tx, items: CreateOrderInput["items"], keepPrices?:
   let taxTotal = D(0);
   const lines: PricedLine[] = [];
   for (const [vid, m] of merged) {
-    const v = await tx.must(C.variants, vid, "商品 SKU");
+    const v = await tx.must(C.variants, vid, "商品品項");
     const kept = keepPrices?.get(vid);
     if (!kept && (v.status === "ARCHIVED" || v.productStatus === "ARCHIVED")) throw new DomainError(`${v.sku} 已封存，無法下單`);
     const unitPrice = D(kept ?? (v.salePrice as string));
@@ -145,7 +145,7 @@ async function createItems(tx: Tx, order: { id: string; orderNo: string; ordered
     }) as unknown as OrderItemDoc;
     if (mode === "NOT_TRACKED") continue;
     for (const need of requiredUnits(oi)) {
-      const cv = need.variantId === l.v.id ? l.v : await tx.must(C.variants, need.variantId, "組件 SKU");
+      const cv = need.variantId === l.v.id ? l.v : await tx.must(C.variants, need.variantId, "組件品項");
       const fg = await ensureVariantItem(tx, need.variantId);
       const lots = await availableLots(tx, fg.id);
       const avail = lots.reduce((s, x) => s.add(availableOf(x)), D(0));

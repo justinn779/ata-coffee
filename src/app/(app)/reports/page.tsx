@@ -100,8 +100,8 @@ export default function ReportsPage() {
         }}
       </Guard>
       <Card className="mt-6">
-        <CardHeader title="SKU 銷售表現與毛利" description={`${month} 出貨`} />
-        <SimpleTable head={["SKU", "商品", "數量", "銷售淨額", "COGS", "毛利", "毛利率"]} rows={(skus.data ?? []).map((s) => [s.sku, s.name, s.qty, fmtMoney(s.revenue), fmtMoney(s.cogs), fmtMoney(s.margin), fmtPct(s.marginPct)])} empty={skus.loading ? "計算中…" : "本月沒有出貨"} />
+        <CardHeader title="品項銷售表現與毛利" description={`${month} 出貨`} />
+        <SimpleTable head={["品項編號", "商品", "數量", "銷售淨額", "COGS", "毛利", "毛利率"]} rows={(skus.data ?? []).map((s) => [s.sku, s.name, s.qty, fmtMoney(s.revenue), fmtMoney(s.cogs), fmtMoney(s.margin), fmtPct(s.marginPct)])} empty={skus.loading ? "計算中…" : "本月沒有出貨"} />
       </Card>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card>

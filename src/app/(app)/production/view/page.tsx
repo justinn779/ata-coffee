@@ -111,7 +111,7 @@ export default function PODetail() {
                     ]}
                   />
                 ) : (
-                  <SimpleTable head={["包材", "每件用量", `計畫需求（× ${p.plannedQty}）`]} rows={((v.data?.materials as Row[]) ?? []).map((m) => [m.materialName, fmtNum(m.quantityPerUnit, 2), fmtNum(D(m.quantityPerUnit).mul(p.plannedQty), 0)])} empty="此 SKU 未設定包材 BOM" />
+                  <SimpleTable head={["包材", "每件用量", `計畫需求（× ${p.plannedQty}）`]} rows={((v.data?.materials as Row[]) ?? []).map((m) => [m.materialName, fmtNum(m.quantityPerUnit, 2), fmtNum(D(m.quantityPerUnit).mul(p.plannedQty), 0)])} empty="此品項 未設定包材 BOM" />
                 )}
               </Card>
             </div>

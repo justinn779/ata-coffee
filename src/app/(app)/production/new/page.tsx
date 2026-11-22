@@ -24,9 +24,9 @@ export default function NewPO() {
           defaultValues={{ sourceLotId: lot ?? "", targetVariantId: variant ?? "", plannedDate: todayTaipei() }}
           fields={[
             { name: "sourceLotId", label: "熟豆批次（單一來源，不混批）", type: "select", required: true, options: lots, wide: true },
-            { name: "targetVariantId", label: "目標 SKU", type: "select", required: true, options: variants, wide: true },
+            { name: "targetVariantId", label: "目標品項", type: "select", required: true, options: variants, wide: true },
             { name: "plannedQty", label: "預計生產數量", type: "number", unit: "件", required: true },
-            { name: "fillWeightG", label: "單包填充重量", type: "number", unit: "g", hint: "留空使用 SKU 預設；濾掛可自訂" },
+            { name: "fillWeightG", label: "單包填充重量", type: "number", unit: "g", hint: "留空使用品項預設；濾掛可自訂" },
             { name: "plannedDate", label: "生產日期", type: "date", required: true },
             { name: "note", label: "備註", type: "textarea", wide: true },
           ]}

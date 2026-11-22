@@ -26,10 +26,10 @@ export default function ProductDetail() {
             <PageHeader
               title={x.name}
               description={`${x.code} · ${PRODUCT_CATEGORY[x.category]}`}
-              back={{ href: "/products/", label: "商品與 SKU" }}
+              back={{ href: "/products/", label: "商品與品項" }}
               actions={
                 <>
-                  <LinkButton href={`/products/variant/?product=${x.id}`}>＋ 新增 SKU</LinkButton>
+                  <LinkButton href={`/products/variant/?product=${x.id}`}>＋ 新增品項</LinkButton>
                   <LinkButton href={`/products/edit/?id=${x.id}`} variant="outline">
                     編輯商品
                   </LinkButton>

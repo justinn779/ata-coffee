@@ -18,7 +18,7 @@ const PAGES: Array<[string, RegExp]> = [
   ["inventory/ledger/", /庫存帳本/],
   ["inventory/count/", /整批盤點/],
   ["production/", /分裝生產/],
-  ["products/", /商品與 SKU/],
+  ["products/", /商品與品項/],
   ["orders/", /訂單管理/],
   ["customers/", /顧客/],
   ["reports/", /成本與報表/],

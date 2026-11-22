@@ -52,7 +52,7 @@ export async function ensureVariantItem(tx: Tx, variantId: string): Promise<InvI
   const id = `variant-${variantId}`;
   const existing = await tx.get<InvItem>(C.items, id);
   if (existing) return existing;
-  const v = await tx.must(C.variants, variantId, "商品 SKU");
+  const v = await tx.must(C.variants, variantId, "商品品項");
   return tx.set(C.items, id, { kind: "FINISHED", variantId, unit: "PCS", name: `${v.productName}｜${v.name}（${v.sku}）`, isActive: true, lowStockThreshold: null, createdAt: nowIso() }) as InvItem;
 }
 

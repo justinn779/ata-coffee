@@ -326,7 +326,7 @@ describe("Case 9：曲線匯入", () => {
 });
 
 describe("Case 10：全流程追溯", () => {
-  it("已出貨訂單 → SKU → 包裝批次 → 烘焙批次 → 生豆批次，數量一致、無個資", async () => {
+  it("已出貨訂單 → 品項 → 包裝批次 → 烘焙批次 → 生豆批次，數量一致、無個資", async () => {
     const f = await baseFixture();
     const g = await receiveGreen(f.coffee.id);
     const r = await roast(g.id, f.roaster.id, 500, 425);

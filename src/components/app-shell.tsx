@@ -51,7 +51,7 @@ const NAV: Array<{ group: string; items: Array<{ href: string; label: string; ic
   {
     group: "銷售與經營",
     items: [
-      { href: "/products", label: "商品與 SKU", icon: Tag },
+      { href: "/products", label: "商品與品項", icon: Tag },
       { href: "/orders", label: "訂單管理", icon: ShoppingBag },
       { href: "/customers", label: "顧客", icon: Users },
       { href: "/reports", label: "成本與報表", icon: BarChart3 },

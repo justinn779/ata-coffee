@@ -408,7 +408,7 @@ export const OPS = {
   "inventory.reconcile": op(z.object({}), async (_i, ctx) => reconcile(ctx.db)),
 
   // ── 分裝 ──
-  "production.create": op(z.object({ sourceLotId: docId("熟豆批次"), targetVariantId: docId("目標 SKU"), plannedQty: reqInt("預計生產數量"), fillWeightG: optDec("單包重量", { min: 0 }), plannedDate: isoDate("生產日期"), note: optStr() }), async (i, ctx) => ({ id: (await tx(ctx, (t) => createProductionOrder(t, { ...i, mode: "PRE_PACK" }, ctx.actor))).id })),
+  "production.create": op(z.object({ sourceLotId: docId("熟豆批次"), targetVariantId: docId("目標品項"), plannedQty: reqInt("預計生產數量"), fillWeightG: optDec("單包重量", { min: 0 }), plannedDate: isoDate("生產日期"), note: optStr() }), async (i, ctx) => ({ id: (await tx(ctx, (t) => createProductionOrder(t, { ...i, mode: "PRE_PACK" }, ctx.actor))).id })),
   "production.complete": op(
     z.object({ id: docId("生產單"), actualQty: reqInt("實際生產數量"), lossG: optDec("損耗", { min: 0 }), laborCost: optDec("包裝人工", { min: 0 }), qualityStatus: z.enum(["PASS", "HOLD", "FAIL"]).default("PASS"), expiryDate: optIsoDate(), note: optStr() }),
     async ({ id, ...i }, ctx) => {
@@ -427,7 +427,7 @@ export const OPS = {
     z.object({
       id: optDocId(),
       productId: docId("商品"),
-      sku: reqStr("SKU", 60),
+      sku: reqStr("品項編號", 60),
       name: reqStr("規格名稱"),
       listPrice: reqDec("原價", { min: 0 }),
       salePrice: reqDec("售價", { min: 0 }),

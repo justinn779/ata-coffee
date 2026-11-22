@@ -81,7 +81,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader title="待分裝需求" description="規劃中的分裝生產單（含接單後分裝）" action={<A href="/production/">全部</A>} />
           <SimpleTable
-            head={["生產單", "SKU", "數量", "類型", "預計日期"]}
+            head={["生產單", "品項編號", "數量", "類型", "預計日期"]}
             rows={pos.data.map((p) => [<A key="a" href={`/production/view/?id=${p.id}`}>{p.orderNo}</A>, p.sku, p.plannedQty, p.orderId ? <Badge key="b" tone="warning">接單後分裝</Badge> : "預先分裝", fmtDbDate(p.plannedDate)])}
             empty={pos.loading ? "載入中…" : "目前沒有待分裝需求"}
           />

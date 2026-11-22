@@ -151,7 +151,7 @@ export default function RoastDetail() {
                 </Card>
                 <Card>
                   <CardHeader title="分裝紀錄" />
-                  <SimpleTable head={["生產單", "SKU", "數量", "狀態"]} rows={pos.data.map((p) => [<A key="p" href={`/production/view/?id=${p.id}`}>{p.orderNo}</A>, p.sku, p.actualQty ?? p.plannedQty, p.status === "COMPLETED" ? "已完成" : p.status === "PLANNED" ? "規劃中" : "已取消"])} empty="尚無分裝" />
+                  <SimpleTable head={["生產單", "品項編號", "數量", "狀態"]} rows={pos.data.map((p) => [<A key="p" href={`/production/view/?id=${p.id}`}>{p.orderNo}</A>, p.sku, p.actualQty ?? p.plannedQty, p.status === "COMPLETED" ? "已完成" : p.status === "PLANNED" ? "規劃中" : "已取消"])} empty="尚無分裝" />
                 </Card>
               </div>
               <Card>

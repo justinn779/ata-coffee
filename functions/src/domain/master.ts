@@ -34,14 +34,14 @@ export async function saveVariant(tx: Tx, input: Data & { id?: string | null; pr
   if (data.isBundle && data.stockPolicy === "MADE_TO_ORDER") throw new DomainError("套組第一版僅支援現貨（組件須有庫存）");
   if (!data.isBundle && data.stockPolicy === "MADE_TO_ORDER" && !data.fillWeightG) throw new DomainError("接單後分裝需設定填充重量");
   if (id) {
-    const prev = await tx.must(C.variants, id, "SKU");
-    if (prev.isBundle !== data.isBundle && (await tx.query(C.orderItems, [["variantId", "==", id]], { limit: 1 })).length) throw new DomainError("已有訂單使用此 SKU，不可切換套組／單品類型");
+    const prev = await tx.must(C.variants, id, "品項");
+    if (prev.isBundle !== data.isBundle && (await tx.query(C.orderItems, [["variantId", "==", id]], { limit: 1 })).length) throw new DomainError("已有訂單使用此品項，不可切換套組／單品類型");
   }
   const bundleComponents = [];
   if (data.isBundle) {
     for (const c of components) {
       if (c.componentVariantId === id) throw new DomainError("套組不可包含自己");
-      const cv = await tx.must(C.variants, c.componentVariantId, "組件 SKU");
+      const cv = await tx.must(C.variants, c.componentVariantId, "組件品項");
       if (cv.isBundle) throw new DomainError("套組組件不可為另一個套組");
       if (!/^\d+$/.test(String(c.quantity)) || Number(c.quantity) <= 0) throw new DomainError("組件數量需為正整數");
       bundleComponents.push({ variantId: cv.id, sku: cv.sku, quantity: Number(c.quantity) });
@@ -52,7 +52,7 @@ export async function saveVariant(tx: Tx, input: Data & { id?: string | null; pr
     const mm = await tx.must(C.materials, m.materialId, "包材");
     mats.push({ materialId: mm.id, materialName: mm.name, quantityPerUnit: toDb(m.quantityPerUnit, 3) });
   }
-  const v = await upsert(tx, C.variants, id, { ...data, productId, productName: product.name, productStatus: product.status, coffeeId: product.coffeeId ?? null, category: product.category, brandSeriesId: product.brandSeriesId ?? null, isLimited: !!product.isLimited, materials: mats, bundleComponents }, actor, { unique: "sku", label: "SKU" });
+  const v = await upsert(tx, C.variants, id, { ...data, productId, productName: product.name, productStatus: product.status, coffeeId: product.coffeeId ?? null, category: product.category, brandSeriesId: product.brandSeriesId ?? null, isLimited: !!product.isLimited, materials: mats, bundleComponents }, actor, { unique: "sku", label: "品項編號" });
   if (!data.isBundle && data.stockPolicy !== "NOT_TRACKED") await ensureVariantItem(tx, v.id);
   return v;
 }

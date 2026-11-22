@@ -257,7 +257,7 @@ function Defaults() {
         { name: "requirePaymentBeforeShip", label: "出貨前必須確認付款", type: "select", required: true, options: [{ value: "true", label: "是" }, { value: "false", label: "否（允許貨到付款等）" }], section: "a" },
         { name: "lowGreenG", label: "生豆預警（每品項）", type: "number", unit: "g", section: "b" },
         { name: "lowRoastedG", label: "熟豆預警（每品項）", type: "number", unit: "g", section: "b" },
-        { name: "lowFinishedPcs", label: "成品預警（每 SKU）", type: "number", unit: "件", section: "b" },
+        { name: "lowFinishedPcs", label: "成品預警（每品項）", type: "number", unit: "件", section: "b" },
         { name: "expiryWarnDays", label: "有效日期提醒（天內）", type: "number", unit: "天", section: "b" },
       ]}
       action={opAction("settings.save")}
@@ -341,7 +341,7 @@ const EXPORTS: Array<[string, string]> = [
   ["invLots", "庫存批次餘額"],
   ["orders", "訂單"],
   ["orderItems", "訂單明細"],
-  ["variants", "商品 SKU"],
+  ["variants", "商品品項"],
   ["customers", "顧客（含個資，請妥善保管）"],
 ];
 const ALL_COLLECTIONS = ["admins", "auditLogs", "settings", "sequences", "uniq", "suppliers", "coffees", "greenPurchases", "greenLots", "roasters", "roastBatches", "roastCurves", "flavorTags", "cuppingTemplates", "cuppingSessions", "equipment", "brewRecipes", "brewSessions", "researchProjects", "locations", "materials", "invItems", "invLots", "invTxs", "invTxReversals", "reservations", "productionOrders", "packagingBatches", "brandSeries", "products", "variants", "customers", "orders", "orderItems", "allocations", "payments", "returns", "costEntries", "costRules", "traces", "brandAssets"];

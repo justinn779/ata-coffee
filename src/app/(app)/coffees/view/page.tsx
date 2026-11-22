@@ -59,7 +59,7 @@ export default function CoffeeDetail() {
               </Card>
               <Card>
                 <CardHeader title="對應商品" />
-                <SimpleTable head={["商品", "SKU", "售價", "填充重量"]} rows={variants.data.map((v) => [<A key="p" href={`/products/view/?id=${v.productId}`}>{v.productName}</A>, v.sku, fmtMoney2(v.salePrice), v.fillWeightG ? `${fmtNum(v.fillWeightG, 1)} g` : "—"])} empty="尚無對應商品" />
+                <SimpleTable head={["商品", "品項編號", "售價", "填充重量"]} rows={variants.data.map((v) => [<A key="p" href={`/products/view/?id=${v.productId}`}>{v.productName}</A>, v.sku, fmtMoney2(v.salePrice), v.fillWeightG ? `${fmtNum(v.fillWeightG, 1)} g` : "—"])} empty="尚無對應商品" />
               </Card>
             </div>
           </>

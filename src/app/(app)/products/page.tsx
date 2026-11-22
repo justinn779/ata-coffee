@@ -15,12 +15,12 @@ export default function ProductsPage() {
   const avail = useAvailability();
   return (
     <>
-      <PageHeader title="商品與 SKU" description="Product 與 ProductVariant 分離；可售量 = 可用成品批次（在庫 − 保留）；套組依組件計算可組數量" actions={<LinkButton href="/products/new/">＋ 新增商品</LinkButton>} />
+      <PageHeader title="商品與品項" description="Product 與 ProductVariant 分離；可售量 = 可用成品批次（在庫 − 保留）；套組依組件計算可組數量" actions={<LinkButton href="/products/new/">＋ 新增商品</LinkButton>} />
       <Guard loading={v.loading} error={v.error}>
         {() => (
           <DataTable
             columns={[
-              { key: "sku", label: "SKU", sortable: true },
+              { key: "sku", label: "品項編號", sortable: true },
               { key: "name", label: "商品／規格" },
               { key: "cat", label: "分類", hideOnMobile: true },
               { key: "price", label: "售價", align: "right", sortable: true },

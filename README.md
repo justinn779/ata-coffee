@@ -1,6 +1,6 @@
 # ATA Coffee Management System
 
-ATA Coffee 咖啡品牌管理後台：咖啡豆與生豆採購、烘焙與曲線、杯測、手沖、研究專案、四類庫存帳本、分裝生產、商品 SKU、訂單、成本與毛利、品牌系列與 QR 履歷。
+ATA Coffee 咖啡品牌管理後台：咖啡豆與生豆採購、烘焙與曲線、杯測、手沖、研究專案、四類庫存帳本、分裝生產、商品與品項、訂單、成本與毛利、品牌系列與 QR 履歷。
 
 **正式網址：https://justinn779.github.io/ata-coffee/**
 
