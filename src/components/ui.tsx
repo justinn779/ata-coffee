@@ -67,7 +67,7 @@ export function PageHeader({ title, description, actions, back }: { title: React
     <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         <div className="flex items-center gap-1">
-          <BackButton fallback={back?.href} />
+          <BackButton parent={back?.href} />
           <h1 className="font-serif text-2xl font-semibold tracking-wide text-fg">{title}</h1>
         </div>
         {description && <p className="mt-1 text-sm text-muted">{description}</p>}

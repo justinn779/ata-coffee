@@ -7,12 +7,10 @@ import { House, LayoutGrid, X, Moon, Sun, LogOut } from "lucide-react";
 import { cn } from "./ui";
 import { BrandMark } from "./brand";
 import { MODULES, findTab, isListPage } from "./nav";
-import { useTrackNav } from "./back-button";
 
 export function AppShell({ user, logout, children }: { user: { name: string; email: string }; logout: () => Promise<void>; children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
-  useTrackNav();
   useEffect(() => setOpen(false), [path]);
   useEffect(() => {
     if (!open) return;
