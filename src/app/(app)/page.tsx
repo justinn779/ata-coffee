@@ -9,6 +9,7 @@ import { useCol, useDocument, useOp } from "@/lib/data";
 import { useQS } from "@/lib/page";
 import { A, Badge, Card, CardBody, CardHeader, LinkButton, PageHeader, SimpleTable, StatCard } from "@/components/ui";
 import { StatusBadge } from "@/components/status";
+import { NAV } from "@/components/nav";
 import type { MonthlyReport } from "../../../functions/src/domain/reports";
 
 export default function Dashboard() {
@@ -43,8 +44,8 @@ export default function Dashboard() {
   return (
     <>
       <PageHeader
-        title="Dashboard"
-        description={`今日概況與 ${month} 經營數字（Asia/Taipei）`}
+        title="主畫面"
+        description={`依功能進入各區；下方為今日概況與 ${month} 經營數字（Asia/Taipei）`}
         actions={
           <label className="flex items-center gap-2 text-xs text-muted">
             報表月份
@@ -52,6 +53,8 @@ export default function Dashboard() {
           </label>
         }
       />
+      <FunctionGrid />
+      <h2 className="mb-3 font-serif text-lg">今日概況</h2>
       <section aria-label="快速新增" className="mb-6 flex gap-2 overflow-x-auto pb-1">
         {[
           ["/green/new/", "＋ 生豆採購"],
@@ -122,5 +125,34 @@ function Recent({ title, href, rows, empty }: { title: string; href: string; row
         ))}
       </CardBody>
     </Card>
+  );
+}
+
+/** 依功能分區的入口 */
+function FunctionGrid() {
+  return (
+    <div className="mb-8 space-y-6">
+      {NAV.map((g) => (
+        <section key={g.group} aria-label={g.group}>
+          <h2 className="mb-2 text-sm font-medium tracking-wider text-muted">{g.group}</h2>
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {g.items.map((it) => {
+              const Icon = it.icon;
+              return (
+                <li key={it.href}>
+                  <Link href={it.href} className="flex h-full flex-col gap-2 rounded-xl border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-primary-soft/40">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-soft text-primary">
+                      <Icon size={20} strokeWidth={1.75} aria-hidden />
+                    </span>
+                    <span className="font-medium">{it.label}</span>
+                    <span className="text-xs leading-snug text-muted">{it.desc}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }

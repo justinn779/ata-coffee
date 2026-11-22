@@ -25,7 +25,7 @@ export default function CoffeeDetail() {
             <PageHeader
               title={x.nameZh}
               description={[x.nameEn, x.code].filter(Boolean).join("・")}
-              back={{ href: "/coffees/", label: "咖啡豆資料" }}
+              back={{ href: "/coffees/", label: "生豆資訊" }}
               actions={
                 <>
                   <LinkButton href={`/green/new/?coffee=${x.id}`}>＋ 生豆採購</LinkButton>

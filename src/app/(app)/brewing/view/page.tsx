@@ -21,7 +21,7 @@ export default function BrewDetail() {
             <PageHeader
               title={`手沖｜${x.coffeeName}`}
               description={`${fmtDateTime(x.brewedAt)} · 烘後第 ${x.restDays} 天 · ${x.batchNo}`}
-              back={{ href: "/brewing/", label: "手沖實驗室" }}
+              back={{ href: "/brewing/", label: "手沖" }}
               actions={
                 <>
                   <LinkButton href={`/brewing/new/?copy=${x.id}`} variant="secondary">

@@ -14,7 +14,7 @@ export default function NewGreenPage() {
   const locations = useCol("locations", [], "code", false);
   return (
     <>
-      <PageHeader title="新增生豆採購" description="入庫時建立生豆批次與入庫帳；每克成本 = (採購重量 × 每公斤單價 + 運費 + 其他) ÷ 實際入庫重量" back={{ href: "/green/", label: "生豆採購批次" }} />
+      <PageHeader title="新增生豆採購" description="入庫時建立生豆批次與入庫帳；每克成本 = (採購重量 × 每公斤單價 + 運費 + 其他) ÷ 實際入庫重量" back={{ href: "/green/", label: "生豆來源" }} />
       {coffees.length === 0 ? (
         <Notice tone="warning">請先建立咖啡豆主檔。</Notice>
       ) : (

@@ -49,7 +49,7 @@ export default function NewRoastPage() {
         };
         return (
           <>
-            <PageHeader title={b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} description="送出時於同一交易中扣除生豆、建立熟豆批次並計算成本。時間格式 mm:ss（自入豆起算）；未填的事件不會被推估。" back={{ href: "/roasting/", label: "烘焙中心" }} />
+            <PageHeader title={b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} description="送出時於同一交易中扣除生豆、建立熟豆批次並計算成本。時間格式 mm:ss（自入豆起算）；未填的事件不會被推估。" back={{ href: "/roasting/", label: "烘豆紀錄" }} />
             {greens.length === 0 || roasters.data.length === 0 ? (
               <Notice tone="warning">{greens.length === 0 ? "沒有可用的生豆批次，請先新增生豆採購。" : "請先於系統設定建立烘豆機。"}</Notice>
             ) : (

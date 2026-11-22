@@ -15,7 +15,7 @@ export default function RoastingPage() {
   return (
     <>
       <PageHeader
-        title="烘焙中心"
+        title="烘豆紀錄"
         description="烘焙批次、時間事件與曲線；依豆款、日期、烘豆機篩選"
         actions={
           <>

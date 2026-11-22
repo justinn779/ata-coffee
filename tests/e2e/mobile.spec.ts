@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("手機：抽屜導覽、卡片列表、無水平捲動", async ({ page }) => {
   await page.goto("./");
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "主畫面" })).toBeVisible();
   await page.getByRole("button", { name: "開啟選單" }).click();
   const drawer = page.getByRole("dialog", { name: "主選單" });
   await expect(drawer).toBeVisible();

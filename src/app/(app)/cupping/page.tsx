@@ -20,7 +20,7 @@ export default function CuppingPage() {
   }
   return (
     <>
-      <PageHeader title="杯測實驗室" description="每次杯測對應實際烘焙批次；評分使用自訂模板（非 SCA 官方標準）" actions={<><LinkButton href="/cupping/compare/" variant="outline">比較</LinkButton><LinkButton href="/cupping/new/">＋ 新增杯測</LinkButton></>} />
+      <PageHeader title="杯測" description="每次杯測對應實際烘焙批次；評分使用自訂模板（非 SCA 官方標準）" actions={<><LinkButton href="/cupping/compare/" variant="outline">比較</LinkButton><LinkButton href="/cupping/new/">＋ 新增杯測</LinkButton></>} />
       <Guard loading={s.loading} error={s.error}>
         {() => (
           <>

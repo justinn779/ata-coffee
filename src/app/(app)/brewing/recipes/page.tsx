@@ -13,7 +13,7 @@ export default function RecipesPage() {
   const list = [...r.data].sort((a, b) => a.name.localeCompare(b.name) || b.version - a.version);
   return (
     <>
-      <PageHeader title="手沖實驗室" description="配方版本：於沖煮紀錄頁「存為配方」建立；同名配方自動遞增版本" actions={<LinkButton href="/brewing/new/">＋ 新增手沖</LinkButton>} />
+      <PageHeader title="手沖" description="配方版本：於沖煮紀錄頁「存為配方」建立；同名配方自動遞增版本" actions={<LinkButton href="/brewing/new/">＋ 新增手沖</LinkButton>} />
       <Tabs active="recipes" tabs={[{ key: "sessions", label: "沖煮紀錄", href: "/brewing/" }, { key: "recipes", label: "配方", href: "/brewing/recipes/", count: list.length }]} />
       <Card>
         <SimpleTable

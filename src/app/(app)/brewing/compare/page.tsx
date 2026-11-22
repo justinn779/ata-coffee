@@ -16,7 +16,7 @@ export default function BrewCompare() {
   const L = (s: Row) => `${fmtDate(s.brewedAt)}（${s.restDays}天）`;
   return (
     <>
-      <PageHeader title="手沖比較" description="比較兩次以上沖煮；同款豆可觀察不同烘後天數的差異（觀察資料，非因果結論）" back={{ href: "/brewing/", label: "手沖實驗室" }} />
+      <PageHeader title="手沖比較" description="比較兩次以上沖煮；同款豆可觀察不同烘後天數的差異（觀察資料，非因果結論）" back={{ href: "/brewing/", label: "手沖" }} />
       <Card className="mb-6">
         <CardHeader title="選擇沖煮紀錄" />
         <CardBody>

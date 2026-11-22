@@ -35,7 +35,7 @@ export default function RoastDetail() {
             <PageHeader
               title={`${x.batchNo}｜${x.coffeeName}`}
               description={`${fmtDateTime(x.roastedAt)} · ${x.roasterName} · 烘後第 ${age} 天`}
-              back={{ href: "/roasting/", label: "烘焙中心" }}
+              back={{ href: "/roasting/", label: "烘豆紀錄" }}
               actions={
                 <>
                   <LinkButton href={`/roasting/new/?copy=${x.id}`} variant="secondary">

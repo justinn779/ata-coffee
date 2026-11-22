@@ -11,7 +11,7 @@ export default function BrewingPage() {
   const s = useCol("brewSessions", [], "brewedAt");
   return (
     <>
-      <PageHeader title="手沖實驗室" description="每次沖煮對應烘焙批次；可複製參數、儲存配方版本與比較" actions={<><LinkButton href="/brewing/compare/" variant="outline">比較</LinkButton><LinkButton href="/brewing/new/">＋ 新增手沖</LinkButton></>} />
+      <PageHeader title="手沖" description="每次沖煮對應烘焙批次；可複製參數、儲存配方版本與比較" actions={<><LinkButton href="/brewing/compare/" variant="outline">比較</LinkButton><LinkButton href="/brewing/new/">＋ 新增手沖</LinkButton></>} />
       <Tabs active="sessions" tabs={[{ key: "sessions", label: "沖煮紀錄", href: "/brewing/", count: s.data.length }, { key: "recipes", label: "配方", href: "/brewing/recipes/" }]} />
       <Guard loading={s.loading} error={s.error}>
         {() => (

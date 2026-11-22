@@ -4,7 +4,7 @@ const bp = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 /**
  * 品牌 Logo（public/brand/logo.png，黑色透明底；深色模式以 CSS 反白）。
- * compact：側欄收合時只顯示方形圖示；large：登入頁、QR 履歷頁等置中大圖
+ * compact：只顯示方形圖示；large：登入頁、QR 履歷頁等置中大圖
  */
 export function BrandMark({ compact = false, large = false }: { compact?: boolean; large?: boolean }) {
   return (

@@ -17,7 +17,7 @@ export default function ComparePage() {
   const hasCurve = (id: string) => curves.data.some((c) => c.roastBatchId === id);
   return (
     <>
-      <PageHeader title="烘焙曲線比較" description="最多 6 批疊圖；時間以入豆為 0。圖例可分別切換各批 BT／RoR。" back={{ href: "/roasting/", label: "烘焙中心" }} />
+      <PageHeader title="烘焙曲線比較" description="最多 6 批疊圖；時間以入豆為 0。圖例可分別切換各批 BT／RoR。" back={{ href: "/roasting/", label: "烘豆紀錄" }} />
       <Card className="mb-6">
         <CardHeader title="選擇批次" />
         <CardBody>

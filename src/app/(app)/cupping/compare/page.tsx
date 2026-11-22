@@ -21,7 +21,7 @@ export default function CuppingCompare() {
   const sc = (s: Row, k: string) => (s.scores as Array<{ attributeKey: string; score: string }>).find((q) => q.attributeKey === k)?.score;
   return (
     <>
-      <PageHeader title="杯測比較" description="同批次或跨批次比較；僅能比較相同評分模板的紀錄" back={{ href: "/cupping/", label: "杯測實驗室" }} />
+      <PageHeader title="杯測比較" description="同批次或跨批次比較；僅能比較相同評分模板的紀錄" back={{ href: "/cupping/", label: "杯測" }} />
       <Card className="mb-6">
         <CardHeader title="選擇杯測紀錄（最多 8 筆）" />
         <CardBody>

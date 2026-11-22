@@ -1,16 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-const SETTINGS = ["account", "roasters", "suppliers", "equipment", "flavors", "templates", "materials", "locations", "defaults", "notify", "brand", "data", "admins", "api", "audit"];
+const SETTINGS = ["account", "roasters", "suppliers", "equipment", "templates", "materials", "locations", "defaults", "notify", "brand", "data", "admins", "api", "audit"];
 const PAGES: Array<[string, RegExp]> = [
-  ["./", /Dashboard/],
-  ["coffees/", /咖啡豆資料/],
-  ["green/", /生豆採購批次/],
-  ["roasting/", /烘焙中心/],
+  ["./", /主畫面/],
+  ["flavors/", /風味描述/],
+  ["coffees/", /生豆資訊/],
+  ["green/", /生豆來源/],
+  ["roasting/", /烘豆紀錄/],
   ["roasting/compare/", /烘焙曲線比較/],
-  ["cupping/", /杯測實驗室/],
+  ["cupping/", /杯測/],
   ["cupping/compare/", /杯測比較/],
-  ["brewing/", /手沖實驗室/],
-  ["brewing/recipes/", /手沖實驗室/],
+  ["brewing/", /手沖/],
+  ["brewing/recipes/", /手沖/],
   ["brewing/compare/", /手沖比較/],
   ["research/", /研究專案/],
   ["inventory/", /庫存中心/],

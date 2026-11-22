@@ -27,7 +27,6 @@ const SECTIONS = [
   ["roasters", "烘豆機"],
   ["suppliers", "供應商"],
   ["equipment", "沖煮器材"],
-  ["flavors", "風味詞彙"],
   ["templates", "評分模板"],
   ["materials", "包材品項"],
   ["locations", "儲位"],
@@ -63,8 +62,6 @@ function Section({ section }: { section: string }) {
       return <Master col="suppliers" op="supplier.save" title="供應商" head={["代碼", "名稱", "聯絡人", "電話", "國家"]} row={(x) => [x.code, x.name, x.contact ?? "—", x.phone ?? "—", x.country ?? "—"]} fields={(x) => [{ name: "code", label: "代碼", required: true, defaultValue: s(x?.code) }, { name: "name", label: "名稱", required: true, defaultValue: s(x?.name) }, { name: "contact", label: "聯絡人", defaultValue: s(x?.contact) }, { name: "phone", label: "電話", defaultValue: s(x?.phone) }, { name: "email", label: "Email", defaultValue: s(x?.email) }, { name: "country", label: "國家", defaultValue: s(x?.country) }, { name: "note", label: "備註", type: "textarea", defaultValue: s(x?.note) }]} />;
     case "equipment":
       return <Master col="equipment" op="equipment.save" title="沖煮器材" desc="研磨機、濾杯、濾紙等主檔" head={["類型", "名稱", "品牌", "型號"]} row={(x) => [EQUIPMENT_TYPE[x.type], x.name, x.brand ?? "—", x.model ?? "—"]} fields={(x) => [{ name: "type", label: "類型", type: "select", options: Object.entries(EQUIPMENT_TYPE).map(([value, label]) => ({ value, label })), defaultValue: s(x?.type) }, { name: "name", label: "名稱", required: true, defaultValue: s(x?.name) }, { name: "brand", label: "品牌", defaultValue: s(x?.brand) }, { name: "model", label: "型號", defaultValue: s(x?.model) }, { name: "note", label: "備註", type: "textarea", defaultValue: s(x?.note) }]} />;
-    case "flavors":
-      return <Master col="flavorTags" op="flavor.save" title="風味詞彙" desc="杯測／手沖輸入的新詞彙會自動加入" head={["詞彙", "分類"]} row={(x) => [x.name, x.category ?? "—"]} fields={(x) => [{ name: "name", label: "詞彙", required: true, defaultValue: s(x?.name) }, { name: "category", label: "分類", defaultValue: s(x?.category) }]} />;
     case "materials":
       return <Master col="materials" op="material.save" title="包材品項" desc="入庫請至庫存中心 → 包材" extra={<LinkButton href="/inventory/?kind=MATERIAL" size="sm" variant="ghost">包材庫存</LinkButton>} head={["代碼", "名稱", "類別", "規格"]} row={(x) => [x.code, x.name, MATERIAL_CATEGORY[x.category], x.spec ?? "—"]} fields={(x) => [{ name: "code", label: "代碼", required: true, defaultValue: s(x?.code) }, { name: "name", label: "名稱", required: true, defaultValue: s(x?.name) }, { name: "category", label: "類別", type: "select", options: Object.entries(MATERIAL_CATEGORY).map(([value, label]) => ({ value, label })), defaultValue: s(x?.category) }, { name: "spec", label: "規格", defaultValue: s(x?.spec) }, { name: "note", label: "備註", type: "textarea", defaultValue: s(x?.note) }]} />;
     case "locations":

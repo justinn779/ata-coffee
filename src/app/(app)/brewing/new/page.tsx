@@ -54,7 +54,7 @@ export default function NewBrewPage() {
         };
         return (
           <>
-            <PageHeader title={edit ? "修改手沖紀錄" : src.data ? "複製手沖參數" : recipe.data ? `使用配方：${recipe.data.name} v${recipe.data.version}` : "新增手沖紀錄"} description="粉水比、烘後天數、累積水量自動計算；分段注水合計需等於總水量" back={edit ? { href: `/brewing/view/?id=${edit.id}`, label: "沖煮紀錄" } : { href: "/brewing/", label: "手沖實驗室" }} />
+            <PageHeader title={edit ? "修改手沖紀錄" : src.data ? "複製手沖參數" : recipe.data ? `使用配方：${recipe.data.name} v${recipe.data.version}` : "新增手沖紀錄"} description="粉水比、烘後天數、累積水量自動計算；分段注水合計需等於總水量" back={edit ? { href: `/brewing/view/?id=${edit.id}`, label: "沖煮紀錄" } : { href: "/brewing/", label: "手沖" }} />
             <EntityForm
               key={`${roasts.length}-${grinders.length}-${drippers.length}-${recipes.data.length}-${legacy.data.length}`}
               draftKey={src.data || recipe.data ? undefined : "brew-new"}

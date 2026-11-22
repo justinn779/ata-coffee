@@ -70,7 +70,7 @@ export default function NewCuppingPage() {
             <PageHeader
               title={x ? "修改杯測" : "新增杯測"}
               description={x ? `${x.batchNo} · ${x.coffeeName} · 原杯測時間 ${fmtDateTime(x.cuppedAt)}（烘焙批次與評分模板不可變更）` : `評分系統：${tpl.name}（${tpl.scaleMin}–${tpl.scaleMax} 分，自訂模板，非 SCA 官方標準）`}
-              back={x ? { href: `/cupping/view/?id=${x.id}`, label: "杯測紀錄" } : { href: "/cupping/", label: "杯測實驗室" }}
+              back={x ? { href: `/cupping/view/?id=${x.id}`, label: "杯測紀錄" } : { href: "/cupping/", label: "杯測" }}
             />
             {!x && list.length > 1 && (
               <p className="mb-4 text-sm text-muted">
