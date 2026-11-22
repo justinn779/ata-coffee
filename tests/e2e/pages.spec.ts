@@ -86,3 +86,14 @@ test("回上頁：站內換頁回到前一頁；直接開啟時回上一層", as
   await page.getByRole("button", { name: "回上頁" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("庫存中心");
 });
+
+test("主功能子分頁：列表頁可切換，明細頁不顯示", async ({ page }) => {
+  await page.goto("inventory/");
+  const tabs = page.getByRole("navigation", { name: "庫存與分裝子功能" });
+  await expect(tabs.getByRole("link", { name: "庫存中心" })).toHaveAttribute("aria-current", "page");
+  await tabs.getByRole("link", { name: "整批盤點" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("整批盤點");
+  await expect(page.getByRole("navigation", { name: "庫存與分裝子功能" }).getByRole("link", { name: "整批盤點" })).toHaveAttribute("aria-current", "page");
+  await page.goto("orders/new/");
+  await expect(page.getByRole("navigation", { name: "訂單與顧客子功能" })).toHaveCount(0);
+});

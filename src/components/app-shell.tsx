@@ -6,16 +6,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { House, LayoutGrid, X, Moon, Sun, LogOut } from "lucide-react";
 import { cn } from "./ui";
 import { BrandMark } from "./brand";
-import { NAV } from "./nav";
+import { MODULES, findTab, isListPage } from "./nav";
 import { useTrackNav } from "./back-button";
-
-/** 目前頁面對應的功能（取最長的路徑前綴，例如 /inventory/count/ 對應「整批盤點」而非「庫存中心」） */
-export function activeHref(path: string) {
-  const p = path.endsWith("/") ? path : `${path}/`;
-  return NAV.flatMap((g) => g.items.map((i) => i.href))
-    .filter((h) => p.startsWith(h))
-    .sort((a, b) => b.length - a.length)[0];
-}
 
 export function AppShell({ user, logout, children }: { user: { name: string; email: string }; logout: () => Promise<void>; children: ReactNode }) {
   const path = usePathname();
@@ -29,7 +21,7 @@ export function AppShell({ user, logout, children }: { user: { name: string; ema
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
   const home = path === "/";
-  const active = activeHref(path);
+  const cur = findTab(path);
   const iconBtn = "rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg";
 
   return (
@@ -76,26 +68,33 @@ export function AppShell({ user, logout, children }: { user: { name: string; ema
                   <X size={20} />
                 </button>
               </div>
-              <nav aria-label="功能" className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-                {NAV.map((g) => (
-                  <div key={g.group}>
-                    <p className="mb-1 px-3 text-[11px] font-medium tracking-wider text-muted">{g.group}</p>
-                    <ul className="space-y-0.5">
-                      {g.items.map((it) => {
-                        const Icon = it.icon;
-                        const on = it.href === active;
-                        return (
-                          <li key={it.href}>
-                            <Link href={it.href} aria-current={on ? "page" : undefined} className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm", on ? "bg-primary-soft font-medium text-primary" : "text-fg/80 hover:bg-surface-2 hover:text-fg")}>
-                              <Icon size={18} strokeWidth={1.75} aria-hidden />
-                              {it.label}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
+              <nav aria-label="功能" className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                {MODULES.map((m) => {
+                  const Icon = m.icon;
+                  const inModule = cur?.module.key === m.key;
+                  return (
+                    <div key={m.key}>
+                      <Link href={m.tabs[0].href} className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium", inModule ? "bg-primary-soft text-primary" : "text-fg hover:bg-surface-2")}>
+                        <Icon size={18} strokeWidth={1.75} aria-hidden />
+                        {m.label}
+                      </Link>
+                      {m.tabs.length > 1 && (
+                        <ul className="mt-0.5 ml-[2.4rem] space-y-0.5 border-l border-border pl-2">
+                          {m.tabs.map((t) => {
+                            const on = cur?.tab.href === t.href;
+                            return (
+                              <li key={t.href}>
+                                <Link href={t.href} aria-current={on ? "page" : undefined} className={cn("block rounded-md px-2 py-1.5 text-sm", on ? "font-medium text-primary" : "text-fg/75 hover:bg-surface-2 hover:text-fg")}>
+                                  {t.label}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </nav>
             </div>
           </div>
@@ -103,11 +102,37 @@ export function AppShell({ user, logout, children }: { user: { name: string; ema
       )}
 
       <main className="px-4 py-6 md:px-8 md:py-8">
-        <div className="mx-auto max-w-7xl">{children}</div>
+        <div className="mx-auto max-w-7xl">
+          {cur && cur.module.tabs.length > 1 && isListPage(path) && <ModuleTabs module={cur.module} active={cur.tab.href} />}
+          {children}
+        </div>
       </main>
     </div>
   );
 }
+/** 主功能底下的子功能切換（只在列表頁顯示） */
+function ModuleTabs({ module: m, active }: { module: (typeof MODULES)[number]; active: string }) {
+  const Icon = m.icon;
+  return (
+    <nav aria-label={`${m.label}子功能`} className="mb-5 flex items-center gap-2 overflow-x-auto pb-1">
+      <span className="mr-1 flex shrink-0 items-center gap-1.5 text-sm text-muted">
+        <Icon size={16} strokeWidth={1.75} aria-hidden />
+        {m.label}
+      </span>
+      {m.tabs.map((t) => (
+        <Link
+          key={t.href}
+          href={t.href}
+          aria-current={t.href === active ? "page" : undefined}
+          className={cn("shrink-0 rounded-full border px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors", t.href === active ? "border-primary bg-primary text-primary-fg" : "border-border bg-surface text-fg/80 hover:border-primary/50 hover:text-fg")}
+        >
+          {t.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark" | null>(null);
   useEffect(() => {

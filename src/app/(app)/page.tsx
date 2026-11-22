@@ -9,7 +9,7 @@ import { useCol, useDocument, useOp } from "@/lib/data";
 import { useQS } from "@/lib/page";
 import { A, Badge, Card, CardBody, CardHeader, LinkButton, PageHeader, SimpleTable, StatCard } from "@/components/ui";
 import { StatusBadge } from "@/components/status";
-import { NAV } from "@/components/nav";
+import { MODULES } from "@/components/nav";
 import type { MonthlyReport } from "../../../functions/src/domain/reports";
 
 export default function Dashboard() {
@@ -128,31 +128,35 @@ function Recent({ title, href, rows, empty }: { title: string; href: string; row
   );
 }
 
-/** 依功能分區的入口 */
+/** 主功能入口：每個主功能一張卡片，下方列出子功能 */
 function FunctionGrid() {
   return (
-    <div className="mb-8 space-y-6">
-      {NAV.map((g) => (
-        <section key={g.group} aria-label={g.group}>
-          <h2 className="mb-2 text-sm font-medium tracking-wider text-muted">{g.group}</h2>
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {g.items.map((it) => {
-              const Icon = it.icon;
-              return (
-                <li key={it.href}>
-                  <Link href={it.href} className="flex h-full flex-col gap-2 rounded-xl border border-border bg-surface p-4 transition-colors hover:border-primary/50 hover:bg-primary-soft/40">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-soft text-primary">
-                      <Icon size={20} strokeWidth={1.75} aria-hidden />
-                    </span>
-                    <span className="font-medium">{it.label}</span>
-                    <span className="text-xs leading-snug text-muted">{it.desc}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
-    </div>
+    <section aria-label="功能" className="mb-8">
+      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {MODULES.map((m) => {
+          const Icon = m.icon;
+          return (
+            <li key={m.key} className="flex flex-col rounded-xl border border-border bg-surface transition-colors hover:border-primary/50">
+              <Link href={m.tabs[0].href} className="flex flex-1 flex-col gap-2 rounded-xl p-4 hover:bg-primary-soft/40">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-soft text-primary">
+                  <Icon size={20} strokeWidth={1.75} aria-hidden />
+                </span>
+                <span className="font-medium">{m.label}</span>
+                <span className="text-xs leading-snug text-muted">{m.desc}</span>
+              </Link>
+              {m.tabs.length > 1 && (
+                <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-2.5">
+                  {m.tabs.map((t) => (
+                    <Link key={t.href} href={t.href} className="rounded-full bg-surface-2 px-2.5 py-1 text-xs text-fg/80 hover:bg-primary-soft hover:text-primary">
+                      {t.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

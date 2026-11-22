@@ -51,9 +51,6 @@ export default function InventoryPage() {
             <LinkButton href={`/inventory/count/?kind=${kind}`} variant="outline">
               整批盤點
             </LinkButton>
-            <LinkButton href="/inventory/ledger/" variant="outline">
-              庫存帳本
-            </LinkButton>
             {kind === "MATERIAL" && materials.data.length > 0 && (
               <ActionDialog
                 label="＋ 包材入庫"
