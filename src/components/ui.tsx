@@ -77,9 +77,9 @@ export function PageHeader({ title, description, actions, back }: { title: React
   );
 }
 
-export function StatCard({ label, value, hint, href, tone }: { label: string; value: ReactNode; hint?: ReactNode; href?: string; tone?: Tone }) {
+export function StatCard({ label, value, hint, href, tone, tip }: { label: string; value: ReactNode; hint?: ReactNode; href?: string; tone?: Tone; tip?: string }) {
   const inner = (
-    <div className={cn("h-full rounded-[var(--radius-card)] border border-border bg-surface p-4 transition-colors", href && "hover:border-border-strong")}>
+    <div title={tip} className={cn("h-full rounded-[var(--radius-card)] border border-border bg-surface p-4 transition-colors", href && "hover:border-border-strong")}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted">{label}</p>
         {tone && <span className={cn("h-2 w-2 rounded-full", { neutral: "bg-muted", primary: "bg-primary", sage: "bg-sage", warning: "bg-warning", danger: "bg-danger", info: "bg-info" }[tone])} aria-hidden />}
