@@ -73,3 +73,16 @@ test("庫存批次頁與帳本", async ({ page }) => {
   await expect(page.getByText("庫存帳本").first()).toBeVisible();
   await expect(page.getByText("烘焙產出").first()).toBeVisible();
 });
+
+test("回上頁：站內換頁回到前一頁；直接開啟時回上一層", async ({ page }) => {
+  await page.goto("./");
+  await page.getByRole("link", { name: /生豆來源/ }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("生豆來源");
+  await page.getByRole("button", { name: "回上頁" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("主畫面");
+  await expect(page.getByRole("button", { name: "回上頁" })).toHaveCount(0);
+  await page.goto("inventory/count/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("整批盤點");
+  await page.getByRole("button", { name: "回上頁" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("庫存中心");
+});
