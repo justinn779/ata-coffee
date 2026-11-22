@@ -72,7 +72,7 @@ export default function PublicTracePage() {
   return (
     <main className="mx-auto min-h-dvh max-w-md px-5 py-8">
       <div className="mb-8 flex justify-center">
-        <BrandMark />
+        <BrandMark large />
       </div>
       <Suspense fallback={<p className="py-20 text-center text-sm text-muted">載入中…</p>}>
         <TraceView />

@@ -54,7 +54,7 @@ function FullScreen({ children }: { children: ReactNode }) {
     <main className="flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex justify-center">
-          <BrandMark />
+          <BrandMark large />
         </div>
         {children}
       </div>
