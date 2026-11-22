@@ -77,4 +77,4 @@ export function findTab(path: string): { module: NavModule; tab: NavTab } | unde
 }
 
 /** 新增、明細、編輯、比較等子頁面不顯示子功能分頁（用左上角 ← 返回） */
-export const isListPage = (path: string) => !/\/(new|view|edit|variant|lot|compare)\/?$/.test(norm(path));
+export const isListPage = (path: string) => !/\/(new|view|edit|variant|lot|compare|live)\/?$/.test(norm(path));

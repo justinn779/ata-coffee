@@ -152,3 +152,46 @@ test("系統設定 → 通知：顯示 Telegram 與 Gmail 設定步驟", async (
   await expect(page.getByLabel("機器人金鑰")).toHaveAttribute("type", "password");
   await expect(page.getByRole("button", { name: "儲存通知設定" })).toBeVisible();
 });
+
+test("平板烘豆即時紀錄：每 30 秒記錄 → 下豆 → 過帳並存成曲線", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("roasting/live/");
+  await expect(page.getByRole("heading", { name: "烘豆即時紀錄" })).toBeVisible();
+  await page.getByLabel("生豆批次（也可以下豆後再選）").selectOption({ index: 1 });
+  await page.getByLabel("投入生豆重量（g）").fill("300");
+  await page.getByLabel("入豆溫（°C）").fill("200");
+  await page.getByLabel("火力起始值").fill("60");
+  await page.getByRole("button", { name: "入豆・開始計時" }).click();
+
+  const keypad = async (v: string) => {
+    for (const c of v) await page.getByRole("button", { name: c, exact: true }).click();
+  };
+  await page.clock.fastForward(30_000);
+  await keypad("120");
+  await page.getByRole("button", { name: "記錄 0:30" }).click();
+  await page.getByRole("button", { name: "火力增加" }).click();
+  await page.clock.fastForward(60_000);
+  await keypad("150");
+  await page.getByRole("button", { name: "記錄 1:30" }).click();
+  await page.getByRole("button", { name: /^轉黃/ }).click();
+  await page.clock.fastForward(150_000);
+  await keypad("190");
+  await page.getByRole("button", { name: "記錄 4:00" }).click();
+  await page.getByRole("button", { name: /^一爆$/ }).click();
+  await page.clock.fastForward(60_000);
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: /^下豆/ }).click();
+  await expect(page.getByRole("button", { name: "下一步：填出爐重量並過帳" })).toBeVisible();
+  // 表格：0:30 的豆溫、1:00 起火力沿用 65
+  await expect(page.getByRole("row", { name: /0:30.*120/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /1:30.*150.*65/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "下一步：填出爐重量並過帳" }).click();
+  await expect(page.getByRole("heading", { name: "過帳平板即時紀錄" })).toBeVisible();
+  await expect(page.getByLabel("轉黃點")).toHaveValue("1:30");
+  await expect(page.getByLabel("下豆時間")).toHaveValue("5:00");
+  await page.getByLabel("出爐熟豆重量").fill("255");
+  await page.getByRole("button", { name: "過帳烘焙批次" }).click();
+  await expect(page).toHaveURL(/roasting\/view/);
+  await expect(page.getByText("平板即時紀錄")).toBeVisible();
+});

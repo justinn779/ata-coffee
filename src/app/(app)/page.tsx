@@ -58,7 +58,7 @@ export default function Dashboard() {
       <section aria-label="快速新增" className="mb-6 flex gap-2 overflow-x-auto pb-1">
         {[
           ["/green/new/", "＋ 生豆採購"],
-          ["/roasting/new/", "＋ 開始烘焙"],
+          ["/roasting/live/", "＋ 平板烘豆紀錄"],
           ["/cupping/new/", "＋ 杯測"],
           ["/brewing/new/", "＋ 手沖紀錄"],
           ["/production/new/", "＋ 分裝單"],

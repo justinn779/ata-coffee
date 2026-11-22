@@ -27,7 +27,10 @@ export default function RoastingPage() {
                 複製上一批
               </LinkButton>
             )}
-            <LinkButton href="/roasting/new/">＋ 開始新一批</LinkButton>
+            <LinkButton href="/roasting/new/" variant="outline">
+              ＋ 手動輸入一批
+            </LinkButton>
+            <LinkButton href="/roasting/live/">平板即時紀錄</LinkButton>
           </>
         }
       />

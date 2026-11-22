@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { fmtSec, nowTaipeiLocal } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
@@ -7,6 +8,7 @@ import { opts, ROAST_EVENT } from "@/lib/labels";
 import { Guard, useGreenLotOptions, useQS } from "@/lib/page";
 import { EntityForm } from "@/components/entity-form";
 import { Notice, PageHeader } from "@/components/ui";
+import { clearLive, liveToRoastForm, loadLive } from "../live-draft";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
 const mm = (v: number | null | undefined) => (v == null ? "" : fmtSec(v));
@@ -18,6 +20,12 @@ export default function NewRoastPage() {
   const roasters = useCol("roasters", [], "name", false);
   const src = useDocument("roastBatches", copy);
   const costs = useCol(copy ? "costEntries" : null, [["roastBatchId", copy]]);
+  const fromLive = useQS("live") === "1";
+  const [live] = useState(() => {
+    if (!fromLive || typeof window === "undefined") return null;
+    const d = loadLive();
+    return d ? liveToRoastForm(d) : null;
+  });
   return (
     <Guard loading={roasters.loading || (!!copy && (src.loading || costs.loading))}>
       {() => {
@@ -45,17 +53,23 @@ export default function NewRoastPage() {
           laborCost: s(cost("ROAST_LABOR")?.amount),
           laborIsEstimate: cost("ROAST_LABOR")?.isEstimate ?? true,
           copiedFromId: s(b?.id),
+          ...(live?.defaults ?? {}),
           events: ((b?.events as Array<Record<string, unknown>>) ?? []).filter((e) => ["HEAT_CHANGE", "AIRFLOW_CHANGE", "DRUM_CHANGE", "NOTE"].includes(e.type as string)).map((e) => ({ timeSec: fmtSec(e.timeSec as number), type: e.type, btC: "", heat: s(e.heat), airflow: s(e.airflow), note: s(e.note) })),
         };
         return (
           <>
-            <PageHeader title={b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} description="送出時於同一交易中扣除生豆、建立熟豆批次並計算成本。時間格式 mm:ss（自入豆起算）；未填的事件不會被推估。" back={{ href: "/roasting/", label: "烘豆紀錄" }} />
+            <PageHeader title={live ? "過帳平板即時紀錄" : b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} description="送出時於同一交易中扣除生豆、建立熟豆批次並計算成本。時間格式 mm:ss（自入豆起算）；未填的事件不會被推估。" back={{ href: "/roasting/", label: "烘豆紀錄" }} />
+            {live && (
+              <div className="mb-4">
+                <Notice>已帶入平板即時紀錄：時間事件與 {live.curvePoints.length} 個紀錄點（豆溫、火力、風門、鍋速），過帳時會一併存成這批的烘焙曲線。請補上出爐熟豆重量。</Notice>
+              </div>
+            )}
             {greens.length === 0 || roasters.data.length === 0 ? (
               <Notice tone="warning">{greens.length === 0 ? "沒有可用的生豆批次，請先新增生豆採購。" : "請先於系統設定建立烘豆機。"}</Notice>
             ) : (
               <EntityForm
                 key={greens.length}
-                draftKey={b ? undefined : "roast-new"}
+                draftKey={b || live ? undefined : "roast-new"}
                 submitLabel="過帳烘焙批次"
                 successMessage="烘焙批次已建立"
                 defaultValues={defaults}
@@ -112,7 +126,10 @@ export default function NewRoastPage() {
                   { name: "peakToDays", label: "覆寫：最佳區間迄", type: "number", unit: "天", section: "e" },
                   { name: "shelfLifeDays", label: "覆寫：保存期限", type: "number", unit: "天", section: "e", hint: "留空使用咖啡豆預設" },
                 ]}
-                action={opAction("roast.create", undefined, (d) => `/roasting/view/?id=${d.id}`)}
+                action={opAction("roast.create", live ? { curvePoints: live.curvePoints } : undefined, (d) => {
+                  if (live) clearLive();
+                  return `/roasting/view/?id=${d.id}`;
+                })}
               />
             )}
           </>

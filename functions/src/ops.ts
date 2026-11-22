@@ -24,7 +24,7 @@ import { MAX_COUNT_LINES, submitStockCount } from "./domain/stockcount";
 import { randomBytes } from "node:crypto";
 import { realChannels, type Channels } from "./notify/channels";
 import { dispatch, getChannels, getNotifySettings, NOTIFY_EVENTS, notifyAfterOp, SECRETS_COL, sendDailySummary } from "./notify/notify";
-import { detectMapping, parseArtisanAlog, parseCsvCurve, preprocessCsv, type ColumnMapping } from "./curves/parse";
+import { detectMapping, parseArtisanAlog, parseCsvCurve, preprocessCsv, withComputedRor, type ColumnMapping } from "./curves/parse";
 
 export interface OpCtx {
   db: Firestore;
@@ -39,6 +39,8 @@ interface Op<S extends z.ZodTypeAny> {
   schema: S;
   run: (input: z.infer<S>, ctx: OpCtx) => Promise<unknown>;
 }
+/** 選填數值（平板紀錄用） */
+const num = (min: number, max: number) => z.number().min(min).max(max).nullable().optional();
 const op = <S extends z.ZodTypeAny>(schema: S, run: (input: z.infer<S>, ctx: OpCtx) => Promise<unknown>): Op<S> => ({ schema, run });
 const id = z.object({ id: docId("資料") });
 const cuppingSchema = z.object({ roastBatchId: docId("烘焙批次"), templateId: docId("評分模板"), cuppedAt: isoDateTime("杯測時間"), grindSetting: optStr(100), doseG: optDec("粉量", { min: 0 }), waterG: optDec("水量", { min: 0 }), waterTempC: optDec("水溫", { min: 0 }), scores: z.record(z.string(), optDec("分數", { min: 0 })).default({}), tags: optStr(500), defects: optStr(), description: optStr(), evaluator: optStr(100), consumedG: optDec("耗用量", { min: 0 }), deductStock: bool() });
@@ -174,12 +176,22 @@ export const OPS = {
       laborIsEstimate: bool(),
       copiedFromId: optDocId(),
       events: z.array(z.object({ timeSec: optMmSs("事件時間"), type: reqStr("事件類型", 30), btC: optDec("BT"), etC: optDec("ET"), heat: optStr(50), airflow: optStr(50), drumSpeed: optStr(50), note: optStr(200) })).optional().default([]),
+      // 平板即時紀錄的曲線點（秒、豆溫、火力、風門、鍋速）
+      curvePoints: z.array(z.object({ t: z.number().int().min(0).max(7200), bt: num(-50, 400), heat: num(-1e4, 1e4), air: num(-1e4, 1e4), drum: num(-1e4, 1e4) })).max(500).optional().default([]),
     }),
     async (i, ctx) => {
       const extra: RoastExtraCost[] = [];
       if (i.energyCost && D(i.energyCost).gt(0)) extra.push({ category: "ROAST_ENERGY", amount: i.energyCost, isEstimate: i.energyIsEstimate, calcNote: i.energyNote });
       if (i.laborCost && D(i.laborCost).gt(0)) extra.push({ category: "ROAST_LABOR", amount: i.laborCost, isEstimate: i.laborIsEstimate });
-      const r = await tx(ctx, (t) => createRoastBatch(t, { ...i, extraCosts: extra, events: i.events.filter((e) => e.timeSec != null).map((e) => ({ ...e, timeSec: e.timeSec! })) }, ctx.actor));
+      const r = await tx(ctx, async (t) => {
+        const res = await createRoastBatch(t, { ...i, extraCosts: extra, events: i.events.filter((e) => e.timeSec != null).map((e) => ({ ...e, timeSec: e.timeSec! })) }, ctx.actor);
+        if (i.curvePoints.length) {
+          const pts = [...new Map(i.curvePoints.map((p) => [p.t, p])).values()].sort((a, b) => a.t - b.t);
+          const points = withComputedRor(pts.map((p) => ({ timeSec: p.t, btC: p.bt ?? null, etC: null, rorC: null, heat: p.heat ?? null, airflow: p.air ?? null, drumSpeed: p.drum ?? null })));
+          await saveCurve(t, { roastBatchId: res.batch.id, source: "MANUAL", fileName: "平板即時紀錄", parsed: { points, events: [], rorComputed: true, warnings: [] } }, ctx.actor);
+        }
+        return res;
+      });
       return { id: r.batch.id };
     },
   ),
