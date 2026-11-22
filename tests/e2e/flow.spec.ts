@@ -120,3 +120,35 @@ test("個人帳號：顯示 Google 綁定狀態與綁定按鈕", async ({ page }
   await expect(page.getByText("未綁定", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "綁定 Google 帳號" })).toBeVisible();
 });
+
+test("列印：可出貨訂單的出貨單與揀貨單（含 Logo、批號）", async ({ page }) => {
+  await page.goto("print/orders/?status=READY_TO_SHIP");
+  await expect(page.getByText("出貨單").first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "ATA Coffee" }).first()).toBeVisible();
+  await expect(page.getByText(/^SO-/).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "列印" })).toBeVisible();
+  await page.getByRole("link", { name: "揀貨單" }).click();
+  await expect(page.getByText(/張訂單 · 列印時間/)).toBeVisible();
+  await expect(page.getByText(/合計 \d+ 件/)).toBeVisible();
+});
+
+test("整批盤點：帶入帳面數量後修改一批 → 送出 → 產生盤點紀錄", async ({ page }) => {
+  await page.goto("inventory/count/?kind=MATERIAL");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("整批盤點");
+  const first = page.getByRole("textbox", { name: /實盤數量/ }).first();
+  await expect(first).toBeVisible();
+  await page.getByRole("button", { name: "全部帶入帳面數量" }).click();
+  const v = Number(await first.inputValue());
+  await first.fill(String(v - 1));
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "送出盤點" }).click();
+  await expect(page.getByText(/盤點 SC-\d{8}-\d{3} 完成：1 批有差異/)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("cell", { name: /^SC-/ }).first()).toBeVisible();
+});
+
+test("系統設定 → 通知：顯示 Telegram 與 Gmail 設定步驟", async ({ page }) => {
+  await page.goto("settings/?s=notify");
+  await expect(page.getByText("@BotFather").first()).toBeVisible();
+  await expect(page.getByLabel("機器人金鑰")).toHaveAttribute("type", "password");
+  await expect(page.getByRole("button", { name: "儲存通知設定" })).toBeVisible();
+});

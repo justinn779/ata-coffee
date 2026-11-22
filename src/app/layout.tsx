@@ -16,7 +16,13 @@ export const metadata: Metadata = {
   description: "ATA Coffee 咖啡品牌管理後台",
   robots: { index: false, follow: false },
   // 加到主畫面（iOS Safari 使用 apple-touch-icon 與 appleWebApp）
-  icons: { icon: `${bp}/icons/icon-192.png`, apple: `${bp}/icons/apple-touch-icon.png` },
+  icons: {
+    icon: [
+      { url: `${bp}/icons/favicon-32.png`, sizes: "32x32", type: "image/png" },
+      { url: `${bp}/icons/icon-192.png`, sizes: "192x192", type: "image/png" },
+    ],
+    apple: `${bp}/icons/apple-touch-icon.png`,
+  },
   appleWebApp: { capable: true, title: "ATA 後台", statusBarStyle: "black-translucent" },
 };
 

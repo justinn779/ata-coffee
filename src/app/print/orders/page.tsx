@@ -88,7 +88,7 @@ function Header({ title, sub }: { title: string; sub: string }) {
   return (
     <div className="mb-5 flex items-end justify-between border-b-2 border-black pb-2">
       <div>
-        <div className="font-serif text-xl font-semibold tracking-[0.15em]">ATA COFFEE</div>
+        <img src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/brand/logo.png`} alt="ATA Coffee" className="h-12 w-auto" />
         <div className="text-xs text-neutral-600">{sub}</div>
       </div>
       <div className="text-2xl font-semibold tracking-widest">{title}</div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { EmailAuthProvider, GoogleAuthProvider, linkWithPopup, reauthenticateWithCredential, unlink, updatePassword } from "firebase/auth";
 import { googleErrorMessage, googleProvider } from "@/lib/google-auth";
+import { NotifySettings } from "./notify";
 import { collection, getDocs } from "firebase/firestore";
 import { getBlob, ref, uploadBytes } from "firebase/storage";
 import { fmtNum } from "@/lib/decimal";
@@ -31,6 +32,7 @@ const SECTIONS = [
   ["materials", "包材品項"],
   ["locations", "儲位"],
   ["defaults", "系統預設與預警"],
+  ["notify", "通知"],
   ["brand", "品牌素材"],
   ["data", "匯出與備份"],
   ["admins", "管理員"],
@@ -69,6 +71,8 @@ function Section({ section }: { section: string }) {
       return <Master col="locations" op="location.save" title="儲位" head={["代碼", "名稱", "備註"]} row={(x) => [x.code, x.name, x.note ?? "—"]} fields={(x) => [{ name: "code", label: "代碼", required: true, defaultValue: s(x?.code) }, { name: "name", label: "名稱", required: true, defaultValue: s(x?.name) }, { name: "note", label: "備註", defaultValue: s(x?.note) }]} />;
     case "templates":
       return <Templates />;
+    case "notify":
+      return <NotifySettings />;
     case "defaults":
       return <Defaults />;
     case "brand":

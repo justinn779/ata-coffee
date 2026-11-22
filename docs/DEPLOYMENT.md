@@ -15,6 +15,12 @@
 - 強制驗證：`functions/.env.ata-coffee` 設定 `ENFORCE_APP_CHECK=true` 後重新部署 Functions；模擬器不強制
 - 若網域變更，需同時更新 reCAPTCHA 金鑰的網域清單與 Firebase 授權網域，否則網站將無法呼叫後端
 
+## 通知
+
+- Cloud Functions `dailyDigest`：Cloud Scheduler 每天 08:30（Asia/Taipei）執行
+- Telegram 機器人金鑰、Gmail 應用程式密碼由管理員在網站輸入，存於 Firestore `secrets/notify`（安全規則禁止用戶端讀寫）
+- 通知失敗不影響業務操作，結果記錄在 `notifyLog`（系統設定 → 通知 可查看）
+
 ## 費用
 
 - **GitHub Pages**：公開儲存庫免費。

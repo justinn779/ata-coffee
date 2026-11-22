@@ -161,3 +161,18 @@ body {
     break-after: auto;
   }
 }
+
+/* 品牌 Logo：黑色透明底，深色模式反白 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-logo {
+    filter: invert(1);
+  }
+}
+:root[data-theme="dark"] .brand-logo {
+  filter: invert(1);
+}
+@media print {
+  .brand-logo {
+    filter: none !important;
+  }
+}

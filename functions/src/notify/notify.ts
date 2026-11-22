@@ -127,7 +127,7 @@ async function orderMsgs(db: Firestore, orderId: string, isNew: boolean): Promis
   }
   if (o.fulfillmentStatus === "AWAITING_PACKAGING") {
     const pos = (await db.collection(C.productionOrders).where("orderId", "==", orderId).get()).docs.map((d) => d.data()).filter((p) => p.status === "PLANNED");
-    if (pos.length) out.push(["packaging", { title: `📦 待分裝：訂單 ${o.orderNo}`, lines: [...pos.map((p) => `・${p.orderNo}：${p.variantName ?? p.sku} ×${p.plannedQty}（預計 ${p.plannedDate}）`), "現貨不足，已預留熟豆，完成分裝後訂單會自動轉為可出貨。"], path: `/production/` }]);
+    if (pos.length) out.push(["packaging", { title: `📦 待分裝：訂單 ${o.orderNo}`, lines: [...pos.map((p) => `・${p.orderNo}：${p.sku} ${p.variantName ?? ""} ×${p.plannedQty}（預計 ${p.plannedDate}）`), "現貨不足，已預留熟豆，完成分裝後訂單會自動轉為可出貨。"], path: `/production/` }]);
   }
   return out;
 }

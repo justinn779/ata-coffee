@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const SETTINGS = ["account", "roasters", "suppliers", "equipment", "flavors", "templates", "materials", "locations", "defaults", "brand", "data", "admins", "api", "audit"];
+const SETTINGS = ["account", "roasters", "suppliers", "equipment", "flavors", "templates", "materials", "locations", "defaults", "notify", "brand", "data", "admins", "api", "audit"];
 const PAGES: Array<[string, RegExp]> = [
   ["./", /Dashboard/],
   ["coffees/", /咖啡豆資料/],
@@ -16,6 +16,7 @@ const PAGES: Array<[string, RegExp]> = [
   ["inventory/", /庫存中心/],
   ["inventory/?kind=FINISHED", /庫存中心/],
   ["inventory/ledger/", /庫存帳本/],
+  ["inventory/count/", /整批盤點/],
   ["production/", /分裝生產/],
   ["products/", /商品與 SKU/],
   ["orders/", /訂單管理/],
