@@ -2,6 +2,7 @@ import Link from "next/link";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { ComponentProps, ReactNode } from "react";
+import { BackButton } from "./back-button";
 
 export const cn = (...c: ClassValue[]) => twMerge(clsx(c));
 
@@ -65,12 +66,10 @@ export function PageHeader({ title, description, actions, back }: { title: React
   return (
     <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        {back && (
-          <Link href={back.href} className="mb-1 inline-block text-xs text-muted hover:text-primary">
-            ← {back.label}
-          </Link>
-        )}
-        <h1 className="font-serif text-2xl font-semibold tracking-wide text-fg">{title}</h1>
+        <div className="flex items-center gap-1">
+          <BackButton fallback={back?.href} />
+          <h1 className="font-serif text-2xl font-semibold tracking-wide text-fg">{title}</h1>
+        </div>
         {description && <p className="mt-1 text-sm text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}

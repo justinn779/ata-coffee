@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, House, LayoutGrid, X, Moon, Sun, LogOut } from "lucide-react";
+import { House, LayoutGrid, X, Moon, Sun, LogOut } from "lucide-react";
 import { cn } from "./ui";
 import { BrandMark } from "./brand";
 import { NAV } from "./nav";
+import { useTrackNav } from "./back-button";
 
 /** 目前頁面對應的功能（取最長的路徑前綴，例如 /inventory/count/ 對應「整批盤點」而非「庫存中心」） */
 export function activeHref(path: string) {
@@ -16,24 +17,11 @@ export function activeHref(path: string) {
     .sort((a, b) => b.length - a.length)[0];
 }
 
-/** 上一層路徑：/orders/view/ → /orders/；/orders/ → / */
-export function parentPath(path: string) {
-  const parts = path.split("/").filter(Boolean);
-  return parts.length > 1 ? `/${parts.slice(0, -1).join("/")}/` : "/";
-}
-
-// 本次開啟網站後在站內換頁的次數；直接開啟某頁（或重新整理）時為 0，回上頁就改去上一層
-let inAppNavs = -1;
-
 export function AppShell({ user, logout, children }: { user: { name: string; email: string }; logout: () => Promise<void>; children: ReactNode }) {
   const path = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    setOpen(false);
-    inAppNavs++;
-  }, [path]);
-  const goBack = () => (inAppNavs > 0 ? router.back() : router.push(parentPath(path)));
+  useTrackNav();
+  useEffect(() => setOpen(false), [path]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -48,11 +36,6 @@ export function AppShell({ user, logout, children }: { user: { name: string; ema
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur print:hidden">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 md:px-8">
-          {!home && (
-            <button type="button" onClick={goBack} className="-ml-2 rounded-lg p-2 text-fg/80 hover:bg-surface-2 hover:text-fg" aria-label="回上頁" title="回上頁">
-              <ArrowLeft size={22} strokeWidth={1.75} />
-            </button>
-          )}
           <BrandMark />
           <div className="ml-auto flex items-center gap-1">
             {!home && (
