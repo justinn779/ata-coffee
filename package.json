@@ -34,8 +34,8 @@
     "nodemailer": "^10.6.1",
     "papaparse": "^5.7.1",
     "qrcode": "^1.5.4",
-    "react": "19.1.10",
-    "react-dom": "19.1.10",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "react-hook-form": "^7.92.0",
     "tailwind-merge": "^3.7.1",
     "zod": "^4.6.7"
