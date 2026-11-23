@@ -3,12 +3,13 @@
 import { nowTaipeiLocal, todayTaipei } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol } from "@/lib/data";
-import { useCoffeeOptions, useQS } from "@/lib/page";
+import { useCoffeeOptions, useNext, useQS, withNext } from "@/lib/page";
 import { EntityForm } from "@/components/entity-form";
-import { Notice, PageHeader } from "@/components/ui";
+import { LinkButton, Notice, PageHeader } from "@/components/ui";
 
 export default function NewGreenPage() {
   const coffee = useQS("coffee");
+  const next = useNext();
   const coffees = useCoffeeOptions();
   const suppliers = useCol("suppliers", [], "code", false);
   const locations = useCol("locations", [], "code", false);
@@ -16,7 +17,14 @@ export default function NewGreenPage() {
     <>
       <PageHeader title="新增生豆採購" description="入庫時建立生豆批次與入庫帳；每克成本 = (採購重量 × 每公斤單價 + 運費 + 其他) ÷ 實際入庫重量" back={{ href: "/green/", label: "生豆來源" }} />
       {coffees.length === 0 ? (
-        <Notice tone="warning">請先建立咖啡豆主檔。</Notice>
+        <Notice tone="warning">
+          <span className="flex flex-wrap items-center justify-between gap-3">
+            還沒有咖啡豆，請先建立一支。
+            <LinkButton size="sm" href={withNext("/coffees/new/", next ? withNext("/green/new/", next) : "/green/new/")}>
+              ＋ 新增咖啡豆
+            </LinkButton>
+          </span>
+        </Notice>
       ) : (
         <EntityForm
           key={`${coffees.length}-${suppliers.data.length}-${locations.data.length}`}
@@ -47,7 +55,7 @@ export default function NewGreenPage() {
             { name: "locationId", label: "儲存位置", type: "select", options: locations.data.map((l) => ({ value: l.id, label: l.name })), section: "c" },
             { name: "note", label: "備註", type: "textarea", wide: true, section: "c" },
           ]}
-          action={opAction("green.receive", undefined, (d) => `/inventory/lot/?id=${d.lotId}`)}
+          action={opAction("green.receive", undefined, (d) => next ?? `/inventory/lot/?id=${d.lotId}`)}
         />
       )}
     </>

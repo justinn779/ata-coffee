@@ -7,7 +7,14 @@ import { fmtDate } from "./time";
 import { useCol, type Row } from "./data";
 
 export const useQS = (k: string) => useSearchParams().get(k);
-export const useQSList = (k: string) => (useSearchParams().get(k) ?? "").split(",").filter(Boolean);
+/** 完成後要回去的站內路徑（?next=），只接受以單一 / 開頭的站內路徑 */
+export const useNext = () => {
+  const n = useSearchParams().get("next");
+  return n && n.startsWith("/") && !n.startsWith("//") ? n : null;
+};
+/** 在連結上加上「完成後回到 next」 */
+export const withNext = (href: string, next: string) => `${href}${href.includes("?") ? "&" : "?"}next=${encodeURIComponent(next)}`;
+export const useQSList =(k: string) => (useSearchParams().get(k) ?? "").split(",").filter(Boolean);
 
 export function Loading({ label = "載入中…" }: { label?: string }) {
   return (

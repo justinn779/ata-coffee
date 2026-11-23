@@ -5,9 +5,9 @@ import { fmtSec, nowTaipeiLocal } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
 import { opts, ROAST_EVENT } from "@/lib/labels";
-import { Guard, useGreenLotOptions, useQS } from "@/lib/page";
+import { Guard, useGreenLotOptions, useQS, withNext } from "@/lib/page";
 import { EntityForm } from "@/components/entity-form";
-import { Notice, PageHeader } from "@/components/ui";
+import { LinkButton, Notice, PageHeader } from "@/components/ui";
 import { clearLive, liveToRoastForm, loadLive } from "../live-draft";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -21,6 +21,7 @@ export default function NewRoastPage() {
   const src = useDocument("roastBatches", copy);
   const costs = useCol(copy ? "costEntries" : null, [["roastBatchId", copy]]);
   const fromLive = useQS("live") === "1";
+  const here = fromLive ? "/roasting/new/?live=1" : copy ? `/roasting/new/?copy=${copy}` : "/roasting/new/";
   const [live] = useState(() => {
     if (!fromLive || typeof window === "undefined") return null;
     const d = loadLive();
@@ -58,14 +59,32 @@ export default function NewRoastPage() {
         };
         return (
           <>
-            <PageHeader title={live ? "過帳平板即時紀錄" : b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} description="送出時於同一交易中扣除生豆、建立熟豆批次並計算成本。時間格式 mm:ss（自入豆起算）；未填的事件不會被推估。" back={{ href: "/roasting/", label: "烘豆紀錄" }} />
+            <PageHeader title={live ? "過帳平板即時紀錄" : b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} back={{ href: "/roasting/", label: "烘豆紀錄" }} />
             {live && (
               <div className="mb-4">
-                <Notice>已帶入平板即時紀錄：時間事件與 {live.curvePoints.length} 個紀錄點（豆溫、火力、風門、鍋速），過帳時會一併存成這批的烘焙曲線。請補上出爐熟豆重量。</Notice>
+                <Notice>
+                  <span title="時間事件與豆溫、火力、風門、鍋速紀錄點，過帳時會存成這批的烘焙曲線">已帶入 {live.curvePoints.length} 個紀錄點與時間事件，補上出爐重量即可過帳。</span>
+                </Notice>
               </div>
             )}
-            {greens.length === 0 || roasters.data.length === 0 ? (
-              <Notice tone="warning">{greens.length === 0 ? "沒有可用的生豆批次，請先新增生豆採購。" : "請先於系統設定建立烘豆機。"}</Notice>
+            {greens.length === 0 ? (
+              <Notice tone="warning">
+                <span className="flex flex-wrap items-center justify-between gap-3">
+                  {live ? "還沒有生豆批次可以扣庫存。平板紀錄已保存，新增完會回到這裡。" : "還沒有生豆批次，請先新增生豆採購。"}
+                  <LinkButton size="sm" href={withNext("/green/new/", here)}>
+                    ＋ 新增生豆採購
+                  </LinkButton>
+                </span>
+              </Notice>
+            ) : roasters.data.length === 0 ? (
+              <Notice tone="warning">
+                <span className="flex flex-wrap items-center justify-between gap-3">
+                  還沒有烘豆機，請先在系統設定新增。{live && "平板紀錄已保存，新增完再回來過帳。"}
+                  <LinkButton size="sm" href="/settings/?s=roasters">
+                    前往設定烘豆機
+                  </LinkButton>
+                </span>
+              </Notice>
             ) : (
               <EntityForm
                 key={greens.length}

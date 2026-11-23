@@ -3,9 +3,10 @@
 import { EntityForm, type FieldDef } from "@/components/entity-form";
 import { opAction } from "@/lib/api";
 import { useCol, type Row } from "@/lib/data";
-import { formDefaults } from "@/lib/page";
+import { formDefaults, useNext } from "@/lib/page";
 
 export function CoffeeForm({ initial }: { initial?: Row }) {
+  const next = useNext();
   const suppliers = useCol("suppliers", [], "code", false);
   const fields: FieldDef[] = [
     { name: "id", label: "", type: "hidden" },
@@ -41,7 +42,7 @@ export function CoffeeForm({ initial }: { initial?: Row }) {
         { key: "fresh", title: "養豆與賞味", description: "最佳風味區間不等於商品有效日期；烘焙批次可覆寫這些預設值" },
       ]}
       defaultValues={formDefaults(initial, keys)}
-      action={opAction("coffee.save", undefined, (d) => `/coffees/view/?id=${d.id}`)}
+      action={opAction("coffee.save", undefined, (d) => next ?? `/coffees/view/?id=${d.id}`)}
       draftKey={initial ? undefined : "coffee-new"}
       submitLabel={initial ? "儲存變更" : "建立咖啡豆"}
     />
