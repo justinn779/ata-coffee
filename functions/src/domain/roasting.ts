@@ -1,7 +1,7 @@
 import { D, toDb, type Num, percent, Decimal } from "../../../src/lib/decimal";
 import { DomainError } from "../../../src/lib/errors";
-import { addDaysYmd } from "../../../src/lib/time";
-import { newId, nowIso, type Tx } from "../tx";
+import { addDaysYmd, restDays } from "../../../src/lib/time";
+import { newId, nowIso, type Doc, type Tx } from "../tx";
 import { C, type Actor, type InvLot } from "../types";
 import { audit, nextNumber } from "./core";
 import { createLot, ensureCoffeeItem, post } from "./inventory";
@@ -81,6 +81,35 @@ export interface CreateRoastInput {
 
 const nn = (v: Num | null | undefined, dp: number) => (v == null || v === "" ? null : toDb(v, dp));
 
+/** 不影響庫存的紀錄欄位（新增與修改共用） */
+function recordFields(input: CreateRoastInput, phases: ReturnType<typeof computePhases>) {
+  return {
+    chargeTempC: nn(input.chargeTempC, 1),
+    turningPointSec: input.turningPointSec ?? null,
+    turningPointTempC: nn(input.turningPointTempC, 1),
+    dryEndSec: input.dryEndSec ?? null,
+    firstCrackStartSec: input.firstCrackStartSec ?? null,
+    firstCrackEndSec: input.firstCrackEndSec ?? null,
+    dropSec: input.dropSec ?? null,
+    dropTempC: nn(input.dropTempC, 1),
+    totalTimeSec: phases.totalTimeSec,
+    dryingPhaseSec: phases.dryingPhaseSec,
+    maillardPhaseSec: phases.maillardPhaseSec,
+    developmentPhaseSec: phases.developmentPhaseSec,
+    dtrPercent: phases.dtrPercent ? toDb(phases.dtrPercent, 3) : null,
+    roastLevel: input.roastLevel ?? null,
+    targetProfile: input.targetProfile ?? null,
+    result: input.result ?? null,
+    qualityRating: input.qualityRating ?? null,
+    note: input.note ?? null,
+    restStartDays: input.restStartDays ?? null,
+    peakFromDays: input.peakFromDays ?? null,
+    peakToDays: input.peakToDays ?? null,
+    shelfLifeDays: input.shelfLifeDays ?? null,
+    events: (input.events ?? []).map((e) => ({ id: newId(), timeSec: e.timeSec, type: e.type, btC: nn(e.btC, 1), etC: nn(e.etC, 1), heat: e.heat ?? null, airflow: e.airflow ?? null, drumSpeed: e.drumSpeed ?? null, note: e.note ?? null })),
+  };
+}
+
 export async function createRoastBatch(tx: Tx, input: CreateRoastInput, actor: Actor) {
   const green = await tx.must(C.greenLots, input.greenLotId, "生豆批次");
   const coffee = await tx.must(C.coffees, green.coffeeId as string, "咖啡豆");
@@ -109,31 +138,9 @@ export async function createRoastBatch(tx: Tx, input: CreateRoastInput, actor: A
     greenWeightG: toDb(input.greenWeightG, 3),
     roastedWeightG: toDb(input.roastedWeightG, 3),
     weightLossPercent: toDb(loss, 3),
-    chargeTempC: nn(input.chargeTempC, 1),
-    turningPointSec: input.turningPointSec ?? null,
-    turningPointTempC: nn(input.turningPointTempC, 1),
-    dryEndSec: input.dryEndSec ?? null,
-    firstCrackStartSec: input.firstCrackStartSec ?? null,
-    firstCrackEndSec: input.firstCrackEndSec ?? null,
-    dropSec: input.dropSec ?? null,
-    dropTempC: nn(input.dropTempC, 1),
-    totalTimeSec: phases.totalTimeSec,
-    dryingPhaseSec: phases.dryingPhaseSec,
-    maillardPhaseSec: phases.maillardPhaseSec,
-    developmentPhaseSec: phases.developmentPhaseSec,
-    dtrPercent: phases.dtrPercent ? toDb(phases.dtrPercent, 3) : null,
-    roastLevel: input.roastLevel ?? null,
-    targetProfile: input.targetProfile ?? null,
-    result: input.result ?? null,
-    qualityRating: input.qualityRating ?? null,
-    note: input.note ?? null,
-    restStartDays: input.restStartDays ?? null,
-    peakFromDays: input.peakFromDays ?? null,
-    peakToDays: input.peakToDays ?? null,
-    shelfLifeDays: input.shelfLifeDays ?? null,
+    ...recordFields(input, phases),
     copiedFromId: input.copiedFromId ?? null,
     greenCostTotal: toDb(greenCost, 2),
-    events: (input.events ?? []).map((e) => ({ id: newId(), timeSec: e.timeSec, type: e.type, btC: nn(e.btC, 1), etC: nn(e.etC, 1), heat: e.heat ?? null, airflow: e.airflow ?? null, drumSpeed: e.drumSpeed ?? null, note: e.note ?? null })),
     invLotId: "",
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -162,3 +169,137 @@ export async function createRoastBatch(tx: Tx, input: CreateRoastInput, actor: A
 }
 
 export { freshnessOf } from "../../../src/lib/freshness";
+
+// ───────────── 修改／刪除烘焙批次 ─────────────
+
+/** 熟豆批次上「非本次烘焙、也非杯測／試喝」的異動（分裝、出貨、報廢、盤點等）；有的話不能改重量或刪除 */
+async function roastedLotUsage(tx: Tx, rb: Doc) {
+  const lot = await tx.must<InvLot>(C.lots, rb.invLotId as string, "熟豆庫存批次");
+  const txs = await tx.query(C.txs, [["lotId", "==", lot.id]]);
+  // 依來源分組加總：已撤銷／沖銷而淨額為 0 的異動不算使用；杯測、試喝耗用不擋
+  const net = new Map<string, { sum: Decimal; types: Set<string> }>();
+  for (const t of txs) {
+    if (t.refType === "RoastBatch" && t.refId === rb.id) continue;
+    const key = t.reversesId ? `tx:${t.reversesId}` : t.refType === "MANUAL" ? `tx:${t.id}` : `${t.refType}:${t.refId}`;
+    const g = net.get(key) ?? { sum: D(0), types: new Set<string>() };
+    g.sum = g.sum.add(t.quantity as string);
+    g.types.add(t.type as string);
+    net.set(key, g);
+  }
+  const used = [...net.values()].some((g) => !g.sum.isZero() && ![...g.types].every((x) => x === "CUPPING_USE" || x === "TASTING_USE"));
+  return { lot, used: used || D(lot.reserved).gt(0) };
+}
+
+/** 依烘焙日期重新計算杯測、手沖的「烘後天數」與批次顯示資訊 */
+async function syncLabRecords(tx: Tx, rb: Doc) {
+  for (const col of [C.cuppings, C.brews]) {
+    const at = col === C.cuppings ? "cuppedAt" : "brewedAt";
+    const what = col === C.cuppings ? "杯測" : "手沖";
+    for (const s of await tx.query(col, [["roastBatchId", "==", rb.id]])) {
+      if ((s[at] as string) < (rb.roastedAt as string)) throw new DomainError(`烘焙時間不可晚於這批已有的${what}紀錄（${String(s[at]).slice(0, 16).replace("T", " ")}）`);
+      await tx.update(col, s.id, { batchNo: rb.batchNo, coffeeId: rb.coffeeId, coffeeName: rb.coffeeName, restDays: restDays(new Date(rb.roastedAt as string), new Date(s[at] as string)) });
+    }
+  }
+}
+
+/**
+ * 修改烘焙批次：
+ * - 時間、溫度、評價、事件、烘豆機等可隨時修改；杯測／手沖的烘後天數、熟豆到期日一併更新。
+ * - 生豆批次、重量、成本變動時，以差額補扣／退回生豆並調整熟豆庫存與單位成本；
+ *   熟豆已被分裝、出貨、保留或盤點調整時不可再改這些欄位。
+ */
+export async function updateRoastBatch(tx: Tx, id: string, input: CreateRoastInput, actor: Actor) {
+  const cur = await tx.must(C.roastBatches, id, "烘焙批次");
+  const green = await tx.must(C.greenLots, input.greenLotId, "生豆批次");
+  if (green.coffeeId !== cur.coffeeId) throw new DomainError("不能改成不同咖啡豆的生豆批次；請刪除這批後重新過帳");
+  const roaster = await tx.must(C.roasters, input.roasterId, "烘豆機");
+  if (roaster.maxCapacityG && D(input.greenWeightG).gt(roaster.maxCapacityG as string)) throw new DomainError(`投入量超過 ${roaster.name} 最大容量 ${roaster.maxCapacityG}g`);
+  if (input.qualityRating != null && (input.qualityRating < 1 || input.qualityRating > 10)) throw new DomainError("品質評價需介於 1–10");
+  const loss = weightLoss(input.greenWeightG, input.roastedWeightG);
+  const phases = computePhases(input);
+  const coffee = await tx.must(C.coffees, cur.coffeeId as string, "咖啡豆");
+  const newGreenLot = await tx.must<InvLot>(C.lots, green.invLotId as string, "生豆庫存批次");
+  const oldGreen = await tx.must(C.greenLots, cur.greenLotId as string, "原生豆批次");
+  const oldCosts = (await tx.query(C.costs, [["roastBatchId", "==", id]])).filter((c) => c.target === "ROAST_BATCH");
+  const extras = input.extraCosts ?? [];
+  const oldExtra = oldCosts.reduce((s, c) => s.add(c.amount as string), D(0));
+  const newExtra = extras.reduce((s, c) => s.add(c.amount), D(0));
+  const sameGreen = green.id === cur.greenLotId;
+  const greenCost = sameGreen && D(input.greenWeightG).eq(cur.greenWeightG as string) ? D(cur.greenCostTotal as string) : D(input.greenWeightG).mul(newGreenLot.unitCost);
+  const invChanged = !sameGreen || !D(input.greenWeightG).eq(cur.greenWeightG as string) || !D(input.roastedWeightG).eq(cur.roastedWeightG as string) || !oldExtra.eq(newExtra);
+  const { lot, used } = await roastedLotUsage(tx, cur);
+  const batchNo = cur.batchNo as string;
+  if (invChanged) {
+    if (used) throw new DomainError("這批熟豆已被分裝、出貨、保留或盤點調整，生豆批次、重量與成本不能再修改（其他欄位可以改）");
+    const groupId = newId();
+    const note = `修改烘焙 ${batchNo}`;
+    const base = { refType: "RoastBatch", refId: id, groupId, actor, occurredAt: input.roastedAt };
+    if (sameGreen) {
+      const diff = D(cur.greenWeightG as string).sub(input.greenWeightG);
+      if (!diff.isZero()) await post(tx, { ...base, lotId: newGreenLot.id, type: "ROAST_ISSUE", quantity: diff, note: `${note}：投入量 ${cur.greenWeightG}g → ${input.greenWeightG}g` });
+    } else {
+      await post(tx, { ...base, lotId: oldGreen.invLotId as string, type: "ROAST_ISSUE", quantity: cur.greenWeightG as string, note: `${note}：改用 ${green.lotCode}，退回原領料` });
+      await post(tx, { ...base, lotId: newGreenLot.id, type: "ROAST_ISSUE", quantity: D(input.greenWeightG).neg(), note: `${note}：由 ${oldGreen.lotCode} 改用此批` });
+    }
+    const rdiff = D(input.roastedWeightG).sub(cur.roastedWeightG as string);
+    await tx.update(C.lots, lot.id, { unitCost: toDb(greenCost.add(newExtra).div(input.roastedWeightG), 6), updatedAt: nowIso() });
+    if (!rdiff.isZero()) await post(tx, { ...base, lotId: lot.id, type: "ROAST_OUTPUT", quantity: rdiff, note: `${note}：出爐量 ${cur.roastedWeightG}g → ${input.roastedWeightG}g` });
+  }
+  for (const c of oldCosts) await tx.delete(C.costs, c.id);
+  for (const c of extras) tx.create(C.costs, { category: c.category, target: "ROAST_BATCH", amount: toDb(c.amount, 2), isEstimate: c.isEstimate, occurredOn: addDaysYmd(new Date(input.roastedAt), 0), roastBatchId: id, productionOrderId: null, orderId: null, calcNote: c.calcNote ?? null, note: null, createdAt: nowIso() });
+  const shelf = input.shelfLifeDays ?? (coffee.shelfLifeDays as number | null);
+  await tx.update(C.lots, lot.id, {
+    producedAt: input.roastedAt,
+    expiryDate: shelf != null ? addDaysYmd(new Date(input.roastedAt), shelf) : null,
+    expirySource: shelf == null ? null : input.shelfLifeDays != null ? "烘焙批次覆寫保存期限" : "咖啡豆預設保存期限",
+  });
+  const next = await tx.update(C.roastBatches, id, {
+    greenLotId: green.id,
+    greenLotCode: green.lotCode,
+    roasterId: roaster.id,
+    roasterName: roaster.name,
+    roastedAt: input.roastedAt,
+    greenWeightG: toDb(input.greenWeightG, 3),
+    roastedWeightG: toDb(input.roastedWeightG, 3),
+    weightLossPercent: toDb(loss, 3),
+    greenCostTotal: toDb(greenCost, 2),
+    ...recordFields(input, phases),
+    updatedAt: nowIso(),
+  });
+  await syncLabRecords(tx, next);
+  audit(tx, actor, "roast.update", "RoastBatch", id, `修改烘焙 ${batchNo}${invChanged ? `：${input.greenWeightG}g → ${input.roastedWeightG}g（已調整庫存）` : ""}`);
+}
+
+/** 刪除烘焙批次：退回生豆、扣回熟豆，並刪除曲線與成本；已有杯測／手沖或熟豆已被使用時不可刪 */
+export async function deleteRoastBatch(tx: Tx, id: string, actor: Actor) {
+  const cur = await tx.must(C.roastBatches, id, "烘焙批次");
+  const cups = await tx.query(C.cuppings, [["roastBatchId", "==", id]]);
+  const brews = await tx.query(C.brews, [["roastBatchId", "==", id]]);
+  if (cups.length || brews.length) throw new DomainError(`這批還有 ${cups.length} 筆杯測、${brews.length} 筆手沖紀錄，請先刪除那些紀錄`);
+  const { lot, used } = await roastedLotUsage(tx, cur);
+  if (used) throw new DomainError("這批熟豆已被分裝、出貨、保留或盤點調整，不能刪除");
+  const green = await tx.must(C.greenLots, cur.greenLotId as string, "生豆批次");
+  const groupId = newId();
+  const note = `刪除烘焙 ${cur.batchNo}`;
+  if (D(lot.onHand).gt(0)) await post(tx, { lotId: lot.id, type: "ROAST_OUTPUT", quantity: D(lot.onHand).neg(), refType: "RoastBatch", refId: id, groupId, actor, note });
+  await post(tx, { lotId: green.invLotId as string, type: "ROAST_ISSUE", quantity: cur.greenWeightG as string, refType: "RoastBatch", refId: id, groupId, actor, note: `${note}：退回生豆` });
+  await tx.update(C.lots, lot.id, { status: "SCRAPPED", note: `${note}（批次已刪除）`, updatedAt: nowIso() });
+  for (const c of await tx.query(C.costs, [["roastBatchId", "==", id]])) await tx.delete(C.costs, c.id);
+  for (const c of await tx.query(C.roastCurves, [["roastBatchId", "==", id]])) {
+    for (let i = 0; i < ((c.chunkCount as number) ?? 0); i++) await tx.delete(`${C.roastCurves}/${c.id}/chunks`, String(i));
+    await tx.delete(C.roastCurves, c.id);
+  }
+  await tx.delete(C.roastBatches, id);
+  audit(tx, actor, "roast.delete", "RoastBatch", id, `${note}（${cur.coffeeName}，${cur.greenWeightG}g → ${cur.roastedWeightG}g），已退回生豆`);
+}
+
+/** 生豆成本更正後重算烘焙成本；熟豆已分裝、出貨或保留時保留原成本（已進入下游成本），回傳是否有重算 */
+export async function recostRoastBatch(tx: Tx, rb: Doc, greenUnitCost: Decimal | string) {
+  const { lot, used } = await roastedLotUsage(tx, rb);
+  if (used) return false;
+  const greenCost = D(rb.greenWeightG as string).mul(greenUnitCost);
+  const extras = (await tx.query(C.costs, [["roastBatchId", "==", rb.id]])).filter((c) => c.target === "ROAST_BATCH").reduce((s, c) => s.add(c.amount as string), D(0));
+  await tx.update(C.roastBatches, rb.id, { greenCostTotal: toDb(greenCost, 2), updatedAt: nowIso() });
+  await tx.update(C.lots, lot.id, { unitCost: toDb(greenCost.add(extras).div(rb.roastedWeightG as string), 6), updatedAt: nowIso() });
+  return true;
+}

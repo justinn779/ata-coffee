@@ -6,6 +6,7 @@ import { PRODUCT_CATEGORY, PRODUCT_STATUS, STOCK_POLICY } from "@/lib/labels";
 import { useCol, useDocument, type Row } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { StatusBadge } from "@/components/status";
+import { DeleteButton } from "@/components/delete-button";
 import { A, Badge, Card, CardBody, CardHeader, KV, LinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import { useAvailability } from "../shared";
 
@@ -33,6 +34,7 @@ export default function ProductDetail() {
                   <LinkButton href={`/products/edit/?id=${x.id}`} variant="outline">
                     編輯商品
                   </LinkButton>
+                  <DeleteButton inline={false} what="商品" name={x.name} col="products" id={x.id} redirectTo="/products/" description="需先刪除底下所有品項。已有訂單或分裝紀錄的品項不能刪除，可改為「停售／封存」狀態。" />
                 </>
               }
             />
@@ -55,7 +57,7 @@ export default function ProductDetail() {
               </Card>
               {variants.data.map((v) => (
                 <Card key={v.id}>
-                  <CardHeader title={<span>{v.sku}｜{v.name} {v.isBundle && <Badge tone="info">套組</Badge>}</span>} description={STOCK_POLICY[v.stockPolicy]} action={<A href={`/products/variant/?product=${x.id}&id=${v.id}`}>編輯</A>} />
+                  <CardHeader title={<span>{v.sku}｜{v.name} {v.isBundle && <Badge tone="info">套組</Badge>}</span>} description={STOCK_POLICY[v.stockPolicy]} action={<span className="flex items-center gap-1"><A href={`/products/variant/?product=${x.id}&id=${v.id}`}>編輯</A><DeleteButton what="品項" name={v.sku} col="variants" id={v.id} description="已有訂單、分裝或庫存的品項不能刪除。" /></span>} />
                   <CardBody className="space-y-4">
                     <KV
                       cols={4}

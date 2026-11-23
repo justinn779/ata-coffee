@@ -7,6 +7,7 @@ import { callOp, opAction } from "@/lib/api";
 import { useCol, useDocument, useOp, type Row } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { ActionDialog } from "@/components/action-dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { StatusBadge } from "@/components/status";
 import { A, Badge, Card, CardBody, CardHeader, KV, LinkButton, Notice, PageHeader, SimpleTable } from "@/components/ui";
 
@@ -79,7 +80,27 @@ export default function OrderDetail() {
                       修改訂單
                     </LinkButton>
                   )}
+                  {!(preShip && ["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus)) && (
+                    <ActionDialog
+                      label="修改資訊"
+                      variant="secondary"
+                      title="修改訂單資訊"
+                      description="已收款或已出貨的訂單，只能修改顧客、收件與出貨單號等資訊；金額與品項不變。"
+                      payload={{ orderId: x.id }}
+                      fields={[
+                        { name: "customerName", label: "顧客名稱", required: true, defaultValue: x.customerName ?? "" },
+                        { name: "customerPhone", label: "電話", defaultValue: x.customerPhone ?? "" },
+                        { name: "customerEmail", label: "Email", defaultValue: x.customerEmail ?? "" },
+                        { name: "shippingAddress", label: "收件地址", type: "textarea", defaultValue: x.shippingAddress ?? "" },
+                        { name: "shippingMethod", label: "配送方式", defaultValue: x.shippingMethod ?? "" },
+                        ...(x.shipment ? [{ name: "carrier", label: "物流業者", defaultValue: x.shipment.carrier ?? "" }, { name: "trackingNo", label: "物流單號", defaultValue: x.shipment.trackingNo ?? "" }] : []),
+                        { name: "note", label: "備註", type: "textarea", defaultValue: x.note ?? "" },
+                      ]}
+                      action={opAction("order.updateInfo")}
+                    />
+                  )}
                   {preShip && <ActionDialog label="取消訂單" variant="danger" title="取消訂單？" description="將釋放所有保留量、取消未完成的接單後分裝單；歷史紀錄保留。" payload={{ orderId: x.id }} fields={[{ name: "reason", label: "取消原因" }, ...(x.paymentStatus === "PAID" ? [{ name: "refundAmount", label: "同時記錄退款金額", type: "number" as const, defaultValue: x.total }] : [])]} action={opAction("order.cancel")} />}
+                  {(preShip || x.fulfillmentStatus === "CANCELLED") && x.paymentStatus !== "PAID" && <DeleteButton inline={false} what="訂單" name={x.orderNo} id={x.id} op="order.delete" redirectTo="/orders/" description="保留的成品會釋放回庫存，未完成的接單後分裝單會一起刪除。已出貨、已收款（未退款）或有退貨的訂單不能刪除。" />}
                 </>
               }
             />

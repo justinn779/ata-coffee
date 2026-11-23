@@ -4,6 +4,7 @@ import { nowIso, type Tx } from "../tx";
 import { C, type Actor, type InvLot } from "../types";
 import { audit, nextNumber } from "./core";
 import { createLot, ensureCoffeeItem, post } from "./inventory";
+import { recostRoastBatch } from "./roasting";
 
 /** 每克生豆成本 = (採購重量 kg × 每公斤單價 + 運費 + 其他) ÷ 實際入庫 g */
 export function greenCostPerG(i: { purchasedWeightG: Num; unitPricePerKg: Num; shippingCost: Num; otherCost: Num; receivedWeightG: Num }) {
@@ -90,4 +91,77 @@ export async function correctGreenCost(tx: Tx, greenLotId: string, input: { unit
   await tx.update(C.lots, g.invLotId as string, { unitCost: toDb(cost.perG, 6), updatedAt: nowIso() });
   audit(tx, actor, "green.costCorrection", "GreenBeanLot", g.id, `成本更正：${g.costPerG} → ${cost.perG.toString()} /g；原因：${input.reason}`, { before: g.costPerG, after: cost.perG.toString() });
   return cost;
+}
+
+// ───────────── 修改／刪除生豆採購 ─────────────
+
+/**
+ * 修改生豆採購：
+ * - 入庫數量變動時，以差額調整生豆庫存（不可低於已被烘焙用掉的量）。
+ * - 成本（重量、單價、運費、其他）變動時更新每克成本，並重算「熟豆尚未分裝出貨」的烘焙批次成本。
+ * - 批次編號、供應商、咖啡豆（尚未烘焙時）等顯示資訊，同步到烘焙紀錄與庫存批次。
+ */
+export async function updateGreenPurchase(tx: Tx, greenLotId: string, input: ReceiveGreenInput, actor: Actor) {
+  const g = await tx.must(C.greenLots, greenLotId, "生豆批次");
+  if (D(input.purchasedWeightG).lte(0) || D(input.receivedWeightG).lte(0)) throw new DomainError("採購與入庫重量必須大於 0");
+  const shipping = D(input.shippingCost ?? 0);
+  const other = D(input.otherCost ?? 0);
+  const cost = greenCostPerG({ ...input, shippingCost: shipping, otherCost: other });
+  const roasts = await tx.query(C.roastBatches, [["greenLotId", "==", g.id]]);
+  const coffee = await tx.must(C.coffees, input.coffeeId, "咖啡豆");
+  if (input.coffeeId !== g.coffeeId && roasts.length) throw new DomainError("這批生豆已經烘焙過，不能改成其他咖啡豆");
+  const supplier = input.supplierId ? await tx.must(C.suppliers, input.supplierId, "供應商") : null;
+  const lot = await tx.must<InvLot>(C.lots, g.invLotId as string, "生豆庫存批次");
+  const lotCode = input.lotCode?.trim() || (g.lotCode as string);
+  if (lotCode !== g.lotCode && (await tx.query(C.greenLots, [["lotCode", "==", lotCode]])).length) throw new DomainError(`批次編號 ${lotCode} 已存在`);
+  const diff = D(input.receivedWeightG).sub(g.receivedWeightG as string);
+  if (!diff.isZero()) await post(tx, { lotId: lot.id, type: "RECEIPT", quantity: diff, refType: "GreenBeanLot", refId: g.id, note: `修改採購 ${g.purchaseNo}：入庫量 ${g.receivedWeightG}g → ${input.receivedWeightG}g`, actor, occurredAt: input.receivedAt });
+  const item = await ensureCoffeeItem(tx, input.coffeeId, "GREEN");
+  await tx.update(C.lots, lot.id, { itemId: item.id, itemName: item.name, coffeeId: input.coffeeId, lotCode, unitCost: toDb(cost.perG, 6), locationId: input.locationId ?? null, producedAt: input.receivedAt, updatedAt: nowIso() });
+  await tx.update(C.greenLots, g.id, {
+    lotCode,
+    purchaseDate: input.purchaseDate,
+    supplierId: input.supplierId ?? null,
+    supplierName: supplier?.name ?? null,
+    invoiceNo: input.invoiceNo ?? null,
+    coffeeId: input.coffeeId,
+    coffeeName: coffee.nameZh,
+    purchasedWeightG: toDb(input.purchasedWeightG, 3),
+    receivedWeightG: toDb(input.receivedWeightG, 3),
+    unitPricePerKg: toDb(input.unitPricePerKg, 2),
+    shippingCost: toDb(shipping, 2),
+    otherCost: toDb(other, 2),
+    costPerG: toDb(cost.perG, 6),
+    moisturePercent: opt(input.moisturePercent, 2),
+    densityGPerL: opt(input.densityGPerL, 2),
+    waterActivity: opt(input.waterActivity, 3),
+    locationId: input.locationId ?? null,
+    note: input.note ?? null,
+    receivedAt: input.receivedAt,
+    updatedAt: nowIso(),
+  });
+  if (g.purchaseId && (await tx.get(C.greenPurchases, g.purchaseId as string))) await tx.update(C.greenPurchases, g.purchaseId as string, { supplierId: input.supplierId ?? null, supplierName: supplier?.name ?? null, purchaseDate: input.purchaseDate, invoiceNo: input.invoiceNo ?? null, note: input.note ?? null });
+  let recosted = 0;
+  for (const rb of roasts) {
+    if (rb.greenLotCode !== lotCode) await tx.update(C.roastBatches, rb.id, { greenLotCode: lotCode });
+    if (!D(g.costPerG as string).eq(cost.perG) && (await recostRoastBatch(tx, rb, cost.perG))) recosted++;
+  }
+  audit(tx, actor, "green.update", "GreenBeanLot", g.id, `修改生豆採購 ${lotCode}${diff.isZero() ? "" : `，入庫量調整 ${diff.toString()}g`}${recosted ? `，重算 ${recosted} 批烘焙成本` : ""}`);
+  return { recosted };
+}
+
+/** 刪除生豆採購：已烘焙或已有其他庫存異動（盤點、報廢等）時不可刪除 */
+export async function deleteGreenPurchase(tx: Tx, greenLotId: string, actor: Actor) {
+  const g = await tx.must(C.greenLots, greenLotId, "生豆批次");
+  const roasts = await tx.query(C.roastBatches, [["greenLotId", "==", g.id]]);
+  if (roasts.length) throw new DomainError(`這批生豆已有 ${roasts.length} 筆烘焙紀錄，請先刪除那些烘焙批次`);
+  const lot = await tx.must<InvLot>(C.lots, g.invLotId as string, "生豆庫存批次");
+  const txs = await tx.query(C.txs, [["lotId", "==", lot.id]]);
+  if (txs.some((t) => t.type !== "RECEIPT" && !(t.refType === "RoastBatch"))) throw new DomainError("這批生豆已有盤點、報廢等庫存異動，不能刪除（可用庫存調整處理）");
+  if (D(lot.onHand).gt(0)) await post(tx, { lotId: lot.id, type: "RECEIPT", quantity: D(lot.onHand).neg(), refType: "GreenBeanLot", refId: g.id, note: `刪除採購 ${g.purchaseNo}`, actor });
+  await tx.update(C.lots, lot.id, { status: "SCRAPPED", note: `採購 ${g.purchaseNo} 已刪除`, updatedAt: nowIso() });
+  const siblings = g.purchaseId ? await tx.query(C.greenLots, [["purchaseId", "==", g.purchaseId]]) : [];
+  if (g.purchaseId && siblings.length <= 1 && (await tx.get(C.greenPurchases, g.purchaseId as string))) await tx.delete(C.greenPurchases, g.purchaseId as string);
+  await tx.delete(C.greenLots, g.id);
+  audit(tx, actor, "green.delete", "GreenBeanLot", g.id, `刪除生豆採購 ${g.lotCode}（${g.coffeeName}，${g.receivedWeightG}g）`);
 }

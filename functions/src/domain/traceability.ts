@@ -52,6 +52,13 @@ export async function setTracePublished(tx: Tx, traceId: string, publish: boolea
     audit(tx, actor, "trace.unpublish", "Trace", t.id, "取消發布 QR 履歷");
     return;
   }
+  await writePublicTrace(tx, t, recommendedBrew);
+  await tx.update(C.traces, t.id, { isPublished: true, recommendedBrew: recommendedBrew ?? t.recommendedBrew ?? null });
+  audit(tx, actor, "trace.publish", "Trace", t.id, "發布 QR 履歷");
+}
+
+/** 依目前資料重新寫入一筆公開履歷 */
+async function writePublicTrace(tx: Tx, t: Record<string, unknown> & { id: string }, recommendedBrew: string | null | undefined) {
   const pkg = await tx.must(C.packagingBatches, t.packagingBatchId as string, "包裝批次");
   const po = await tx.must(C.productionOrders, pkg.productionOrderId as string, "生產單");
   const variant = await tx.must(C.variants, po.targetVariantId as string, "品項");
@@ -80,6 +87,9 @@ export async function setTracePublished(tx: Tx, traceId: string, publish: boolea
     recommendedBrew: brew,
     updatedAt: nowIso(),
   });
-  await tx.update(C.traces, t.id, { isPublished: true, recommendedBrew: recommendedBrew ?? t.recommendedBrew ?? null });
-  audit(tx, actor, "trace.publish", "Trace", t.id, `發布 QR 履歷 ${pkg.batchNo}`);
+}
+
+/** 主檔（咖啡豆、烘焙、商品、系列、食譜等）修改後，重新整理所有已發布的公開履歷 */
+export async function refreshPublishedTraces(tx: Tx) {
+  for (const t of await tx.query(C.traces, [["isPublished", "==", true]])) await writePublicTrace(tx, t, undefined);
 }

@@ -8,6 +8,7 @@ import { useCol, useDocument, type Row } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { basePath } from "@/lib/firebase";
 import { ActionDialog } from "@/components/action-dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { StatusBadge } from "@/components/status";
 import { A, Badge, Card, CardBody, CardHeader, KV, Notice, PageHeader, SimpleTable } from "@/components/ui";
 
@@ -48,8 +49,38 @@ export default function PODetail() {
                       ]}
                       action={opAction("production.complete")}
                     />
+                    <ActionDialog
+                      label="修改"
+                      variant="secondary"
+                      title="修改分裝單"
+                      description="熟豆預留量會依新的數量與單包重量重新計算。"
+                      payload={{ id: p.id }}
+                      fields={[
+                        { name: "plannedQty", label: "預計生產數量（件）", type: "number", required: true, defaultValue: String(p.plannedQty) },
+                        { name: "fillWeightG", label: "單包重量（g）", type: "number", defaultValue: String(p.fillWeightG ?? "") },
+                        { name: "plannedDate", label: "生產日期", type: "date", required: true, defaultValue: String(p.plannedDate ?? "").slice(0, 10) },
+                        { name: "note", label: "備註", type: "textarea", defaultValue: p.note ?? "" },
+                      ]}
+                      action={opAction("production.update")}
+                    />
                     {!p.orderId && <ActionDialog label="取消" variant="ghost" title="取消分裝單？" description="將釋放已預留的熟豆。" payload={{ id: p.id }} fields={[{ name: "reason", label: "原因" }]} action={opAction("production.cancel")} />}
+                    {!p.orderId && <DeleteButton inline={false} what="分裝單" name={p.orderNo} id={p.id} op="production.delete" redirectTo="/production/" description="會釋放預留的熟豆並刪除這張分裝單。" />}
                   </>
+                ) : p.status === "COMPLETED" && p.mode !== "MADE_TO_ORDER" ? (
+                  <>
+                    <ActionDialog
+                      label="撤銷完成（修改）"
+                      variant="secondary"
+                      title="撤銷完成，退回規劃中？"
+                      description="熟豆、損耗與包材會退回庫存，這批成品、包裝批次與 QR 履歷會刪除，分裝單回到「規劃中」可以修改後再完成。成品已被訂單保留或出貨時不能撤銷。"
+                      confirmLabel="確認撤銷"
+                      payload={{ id: p.id }}
+                      action={opAction("production.reopen")}
+                    />
+                    <DeleteButton inline={false} what="分裝單" name={p.orderNo} id={p.id} op="production.delete" redirectTo="/production/" description="熟豆、損耗與包材會退回庫存，成品、包裝批次與 QR 履歷一併刪除。成品已被訂單保留或出貨時不能刪除。" />
+                  </>
+                ) : p.status === "CANCELLED" && !p.orderId ? (
+                  <DeleteButton inline={false} what="分裝單" name={p.orderNo} id={p.id} op="production.delete" redirectTo="/production/" />
                 ) : null
               }
             />

@@ -194,4 +194,21 @@ test("平板烘豆即時紀錄：每 30 秒記錄 → 下豆 → 過帳並存成
   await page.getByRole("button", { name: "過帳烘焙批次" }).click();
   await expect(page).toHaveURL(/roasting\/view/);
   await expect(page.getByText("平板即時紀錄")).toBeVisible();
+  const title = await page.getByRole("heading", { level: 1 }).innerText();
+
+  // 修改已過帳的批次：時間與重量帶入原值，改出爐重量後儲存
+  await page.getByRole("link", { name: "修改", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("修改 ");
+  await expect(page.getByLabel("出爐熟豆重量")).toHaveValue("255");
+  await expect(page.getByLabel("轉黃點")).toHaveValue("1:30");
+  await page.getByLabel("出爐熟豆重量").fill("250");
+  await page.getByRole("button", { name: "儲存修改" }).click();
+  await expect(page).toHaveURL(/roasting\/view/, { timeout: 60_000 });
+  await expect(page.getByText("250", { exact: false }).first()).toBeVisible();
+
+  // 刪除（頁首按鈕）：回到烘豆紀錄，這批已不在列表
+  await page.getByRole("button", { name: "刪除", exact: true }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "確認刪除" }).click();
+  await expect(page).toHaveURL(/\/roasting\/$/, { timeout: 60_000 });
+  await expect(page.getByText(title.split("｜")[0])).toHaveCount(0);
 });

@@ -160,3 +160,62 @@ export async function cancelProductionOrder(tx: Tx, productionOrderId: string, a
   await tx.update(C.productionOrders, po.id, { status: "CANCELLED", note: [po.note, opts?.reason].filter(Boolean).join("；") || null });
   audit(tx, actor, "production.cancel", "ProductionOrder", po.id, `取消分裝單 ${po.orderNo}`);
 }
+
+// ───────────── 修改／撤銷／刪除分裝生產單 ─────────────
+
+/** 修改規劃中的生產單（數量、單包重量、日期、備註）；重新計算熟豆預留 */
+export async function updateProductionOrder(tx: Tx, productionOrderId: string, input: { plannedQty: number; fillWeightG?: Num | null; plannedDate: string; note?: string | null }, actor: Actor) {
+  const po = await tx.must(C.productionOrders, productionOrderId, "分裝生產單");
+  if (po.status !== "PLANNED") throw new InvalidStateError("已完成的生產單請先「撤銷完成」再修改");
+  if (po.mode === "MADE_TO_ORDER" && input.plannedQty < (po.plannedQty as number)) throw new DomainError("接單後分裝的數量不可少於訂單所需數量");
+  if (!Number.isInteger(input.plannedQty) || input.plannedQty <= 0) throw new DomainError("預計生產數量必須為正整數");
+  const fill = D((input.fillWeightG as string) || (po.fillWeightG as string));
+  if (fill.lte(0)) throw new DomainError("請設定每包填充重量");
+  const resv = (await tx.query<Reservation>(C.reservations, [["productionOrderId", "==", po.id]])).filter((r) => r.status === "ACTIVE");
+  for (const r of resv) await releaseReservation(tx, r.id);
+  await reserve(tx, { lotId: po.sourceLotId as string, quantity: fill.mul(input.plannedQty), purpose: "PRODUCTION", productionOrderId: po.id, note: `分裝預留 ${po.orderNo}` });
+  await tx.update(C.productionOrders, po.id, { plannedQty: input.plannedQty, fillWeightG: toDb(fill, 3), plannedDate: input.plannedDate, note: input.note ?? null, updatedAt: nowIso() });
+  audit(tx, actor, "production.update", "ProductionOrder", po.id, `修改分裝單 ${po.orderNo}：${input.plannedQty} 件 × ${fill}g`);
+}
+
+/**
+ * 撤銷完成：把已完成的生產單退回「規劃中」——熟豆、損耗、包材全部退回庫存，成品批次扣回，
+ * 包裝批次、QR 履歷、分裝人工成本一併刪除，並重新預留熟豆，之後可修改再完成。
+ * 成品已出貨、保留給訂單或有其他異動時不可撤銷。
+ */
+export async function reopenProductionOrder(tx: Tx, productionOrderId: string, actor: Actor) {
+  const po = await tx.must(C.productionOrders, productionOrderId, "分裝生產單");
+  if (po.status !== "COMPLETED") throw new InvalidStateError("只有已完成的生產單可以撤銷");
+  if (po.mode === "MADE_TO_ORDER") throw new InvalidStateError("接單後分裝的成品已分配給訂單，請由訂單處理");
+  const fg = await tx.must<InvLot>(C.lots, po.outputLotId as string, "成品批次");
+  const fgTxs = await tx.query(C.txs, [["lotId", "==", fg.id]]);
+  if (D(fg.reserved).gt(0) || fgTxs.some((t) => !(t.refType === "ProductionOrder" && t.refId === po.id))) throw new InvalidStateError("這批成品已被訂單保留、出貨或有其他異動，不能撤銷");
+  const groupId = newId();
+  const ctx = { actor, refType: "ProductionOrder", refId: po.id, groupId };
+  const note = `撤銷分裝 ${po.orderNo}`;
+  if (D(fg.onHand).gt(0)) await post(tx, { lotId: fg.id, type: "PACKAGING_OUTPUT", quantity: D(fg.onHand).neg(), ...ctx, note });
+  await tx.update(C.lots, fg.id, { status: "SCRAPPED", note: `${note}（成品批次作廢）`, updatedAt: nowIso() });
+  const typeOf: Record<string, "PACKAGING_ISSUE" | "PACKAGING_LOSS" | "MATERIAL_ISSUE"> = { BEANS: "PACKAGING_ISSUE", LOSS: "PACKAGING_LOSS", MATERIAL: "MATERIAL_ISSUE" };
+  for (const c of (po.consumptions as Array<{ lotId: string; kind: string; quantity: string }>) ?? []) await post(tx, { lotId: c.lotId, type: typeOf[c.kind] ?? "ADJUSTMENT", quantity: c.quantity, ...ctx, note: `${note}：退回` });
+  if (po.packagingBatchId) {
+    for (const t of await tx.query(C.traces, [["packagingBatchId", "==", po.packagingBatchId]])) {
+      if (await tx.get(C.publicTraces, t.publicCode as string)) await tx.delete(C.publicTraces, t.publicCode as string);
+      await tx.delete(C.traces, t.id);
+    }
+    await tx.delete(C.packagingBatches, po.packagingBatchId as string);
+  }
+  for (const c of await tx.query(C.costs, [["productionOrderId", "==", po.id]])) await tx.delete(C.costs, c.id);
+  await reserve(tx, { lotId: po.sourceLotId as string, quantity: D(po.fillWeightG as string).mul(po.plannedQty as number), purpose: "PRODUCTION", productionOrderId: po.id, note: `分裝預留 ${po.orderNo}` });
+  await tx.update(C.productionOrders, po.id, { status: "PLANNED", actualQty: null, beansConsumedG: null, lossG: null, laborCost: null, completedAt: null, consumptions: [], packagingBatchId: null, outputLotId: null, updatedAt: nowIso() });
+  audit(tx, actor, "production.reopen", "ProductionOrder", po.id, `${note}：熟豆與包材已退回庫存`);
+}
+
+/** 刪除生產單：已完成的先撤銷；規劃中的釋放熟豆預留後刪除 */
+export async function deleteProductionOrder(tx: Tx, productionOrderId: string, actor: Actor) {
+  const po = await tx.must(C.productionOrders, productionOrderId, "分裝生產單");
+  if (po.mode === "MADE_TO_ORDER" && po.status !== "CANCELLED") throw new InvalidStateError("接單後分裝的生產單請由訂單取消");
+  if (po.status === "COMPLETED") await reopenProductionOrder(tx, po.id, actor);
+  for (const r of (await tx.query<Reservation>(C.reservations, [["productionOrderId", "==", po.id]])).filter((r) => r.status === "ACTIVE")) await releaseReservation(tx, r.id);
+  await tx.delete(C.productionOrders, po.id);
+  audit(tx, actor, "production.delete", "ProductionOrder", po.id, `刪除分裝單 ${po.orderNo}`);
+}

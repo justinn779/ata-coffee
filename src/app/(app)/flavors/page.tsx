@@ -4,6 +4,7 @@ import { opAction } from "@/lib/api";
 import { useCol, type Row } from "@/lib/data";
 import { Guard } from "@/lib/page";
 import { ActionDialog, type DialogField } from "@/components/action-dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { A, Badge, Card, CardHeader, EmptyState, LinkButton, PageHeader, SimpleTable } from "@/components/ui";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -69,7 +70,7 @@ export default function FlavorsPage() {
               <CardHeader title="風味詞彙" description="杯測／手沖輸入的新詞彙會自動加入；可在這裡新增或整理分類" action={<ActionDialog label="＋ 新增" size="sm" title="新增風味詞彙" fields={fields()} action={opAction("flavor.save")} />} />
               <SimpleTable
                 head={["詞彙", "分類", ""]}
-                rows={tags.data.map((x) => [x.name, x.category ?? "—", <ActionDialog key="e" label="編輯" size="sm" variant="ghost" title="編輯風味詞彙" payload={{ id: x.id }} fields={fields(x)} action={opAction("flavor.save")} />])}
+                rows={tags.data.map((x) => [x.name, x.category ?? "—", <span key="e" className="flex gap-1"><ActionDialog label="編輯" size="sm" variant="ghost" title="編輯風味詞彙" description="改名後，杯測、手沖紀錄裡的這個詞會一起更新" payload={{ id: x.id }} fields={fields(x)} action={opAction("flavor.save")} /><DeleteButton what="風味詞彙" name={x.name} col="flavorTags" id={x.id} description="只從詞彙表移除，已寫在杯測、手沖紀錄裡的詞不會被刪掉。" /></span>])}
                 empty={tags.loading ? "載入中…" : "尚無資料"}
               />
             </Card>

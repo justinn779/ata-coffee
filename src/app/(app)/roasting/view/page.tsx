@@ -8,6 +8,7 @@ import { useCol, useDocument, type Row } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { freshnessOf } from "@/lib/freshness";
 import { ActionDialog } from "@/components/action-dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { A, Badge, Card, CardBody, CardHeader, KV, LinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import { CurveChart, CurveImport } from "../curve";
 
@@ -38,7 +39,20 @@ export default function RoastDetail() {
               back={{ href: "/roasting/", label: "烘豆紀錄" }}
               actions={
                 <>
-                  <LinkButton href={`/roasting/new/?copy=${x.id}`} variant="secondary">
+                  <LinkButton href={`/roasting/new/?edit=${x.id}`} variant="secondary">
+                    修改
+                  </LinkButton>
+                  <ActionDialog
+                    label="刪除"
+                    variant="danger"
+                    title={`刪除 ${x.batchNo}？`}
+                    description="投入的生豆會退回庫存，這批熟豆、曲線與成本會一起刪除。已有杯測、手沖，或熟豆已分裝、出貨的批次不能刪除。"
+                    confirmLabel="確認刪除"
+                    payload={{ id: x.id }}
+                    action={opAction("roast.delete")}
+                    redirectTo="/roasting/"
+                  />
+                  <LinkButton href={`/roasting/new/?copy=${x.id}`} variant="outline">
                     複製此批設定
                   </LinkButton>
                   <LinkButton href={`/cupping/new/?roast=${x.id}`} variant="outline">
@@ -106,7 +120,7 @@ export default function RoastDetail() {
                   {curves.data.length > 0 && (
                     <div className="mt-4">
                       <SimpleTable
-                        head={["來源", "檔名", "資料點", "RoR", "匯入時間", "狀態"]}
+                        head={["來源", "檔名", "資料點", "RoR", "匯入時間", "狀態", ""]}
                         rows={curves.data.map((c) => [
                           { MANUAL: "手動", CSV: "CSV", ARTISAN_ALOG: "Artisan .alog" }[c.source as string],
                           c.originalFileName ?? "—",
@@ -114,6 +128,7 @@ export default function RoastDetail() {
                           c.rorComputed ? "由 BT 計算" : "檔案提供",
                           fmtDateTime(c.importedAt),
                           c.isActive ? <Badge key="a" tone="sage">使用中</Badge> : <ActionDialog key="b" label="設為使用中" size="sm" variant="ghost" title="切換使用中曲線？" payload={{ curveId: c.id }} action={opAction("curve.activate")} />,
+                          <DeleteButton key="d" what="這份曲線" id={c.id} op="curve.delete" payload={{ curveId: c.id }} description="刪除這份曲線資料；若是使用中的曲線，會改用最近一份。" />,
                         ])}
                       />
                     </div>
@@ -163,7 +178,7 @@ export default function RoastDetail() {
                       size="sm"
                       variant="outline"
                       title="編輯評價與備註"
-                      description="已過帳的重量與時間無法修改；如有錯誤請以庫存沖銷交易處理。"
+                      description="重量、時間等其他欄位請按上方「修改」。"
                       payload={{ id: x.id }}
                       fields={[
                         { name: "roastLevel", label: "烘焙程度", defaultValue: x.roastLevel ?? "" },

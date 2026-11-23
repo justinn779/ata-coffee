@@ -11,13 +11,14 @@ import { runTx, nowIso } from "./tx";
 import { C, type Actor } from "./types";
 import { audit, DEFAULT_SETTINGS } from "./domain/core";
 import { MANUAL_TX_TYPES, manualAdjust, reverseTransaction, reconcile } from "./domain/inventory";
-import { correctGreenCost, receiveGreenPurchase } from "./domain/green";
-import { createRoastBatch, type RoastExtraCost } from "./domain/roasting";
-import { cancelProductionOrder, completeProductionOrder, createProductionOrder } from "./domain/production";
-import { addOrderCost, cancelOrder, completeOrder, confirmPayment, createOrder, createReturn, inspectReturnItem, markPaymentPending, recordRefund, shipOrder, updateOrder } from "./domain/orders";
+import { correctGreenCost, receiveGreenPurchase , updateGreenPurchase, deleteGreenPurchase} from "./domain/green";
+import { createRoastBatch, deleteRoastBatch, updateRoastBatch, type RoastExtraCost } from "./domain/roasting";
+import { cancelProductionOrder, completeProductionOrder, createProductionOrder , updateProductionOrder, reopenProductionOrder, deleteProductionOrder } from "./domain/production";
+import { addOrderCost, cancelOrder, completeOrder, confirmPayment, createOrder, createReturn, inspectReturnItem, markPaymentPending, recordRefund, shipOrder, updateOrder , deleteOrder } from "./domain/orders";
 import { createBrew, createCupping, deleteBrew, deleteCupping, saveRecipeFromBrew, updateBrew, updateCupping } from "./domain/lab";
 import { lossStats, monthlyReport, skuPerformance } from "./domain/reports";
-import { setTracePublished, traceOrder } from "./domain/traceability";
+import { DELETABLE, deleteCostEntry, deleteMaster } from "./domain/cascade";
+import { refreshPublishedTraces, setTracePublished, traceOrder } from "./domain/traceability";
 import { addExperiment, createApiKey, deleteExperiment, deleteResearch, updateExperiment, receiveMaterial, saveProduct, saveVariant, setBaseline, setLotStatus, upsert } from "./domain/master";
 import { saveCurve, sha256 } from "./domain/curves";
 import { MAX_COUNT_LINES, submitStockCount } from "./domain/stockcount";
@@ -99,24 +100,9 @@ const coffeeSchema = z.object({
   freshnessNote: optStr(),
 });
 
-export const OPS = {
-  // ── 咖啡豆與生豆 ──
-  "coffee.save": op(coffeeSchema, ({ id, ...d }, ctx) =>
-    tx(ctx, async (t) => {
-      if (d.peakFromDays != null && d.peakToDays != null && d.peakToDays < d.peakFromDays) throw new DomainError("最佳飲用區間結束天數不可早於起始天數");
-      const supplier = d.supplierId ? await t.must(C.suppliers, d.supplierId, "供應商") : null;
-      return upsert(t, C.coffees, id, { ...d, supplierName: supplier?.name ?? null, ...(id ? {} : { archivedAt: null }) }, ctx.actor, { unique: "code", label: "咖啡豆" });
-    }),
-  ),
-  "coffee.archive": op(id, ({ id }, ctx) =>
-    tx(ctx, async (t) => {
-      const c = await t.must(C.coffees, id, "咖啡豆");
-      await t.update(C.coffees, id, { archivedAt: c.archivedAt ? null : nowIso() });
-      audit(t, ctx.actor, "coffee.archive", "Coffee", id, c.archivedAt ? "取消封存" : "封存");
-    }),
-  ),
-  "green.receive": op(
-    z.object({
+
+/** 生豆採購欄位（新增與修改共用） */
+const greenFields = {
       coffeeId: docId("咖啡豆"),
       supplierId: optDocId(),
       purchaseDate: isoDate("採購日期"),
@@ -133,20 +119,10 @@ export const OPS = {
       waterActivity: optDec("水活性", { min: 0 }),
       locationId: optDocId(),
       note: optStr(),
-    }),
-    async (i, ctx) => {
-      const r = await tx(ctx, (t) => receiveGreenPurchase(t, i, ctx.actor));
-      return { id: r.greenLot.id, lotId: r.lot.id };
-    },
-  ),
-  "green.correctCost": op(z.object({ greenLotId: docId("生豆批次"), unitPricePerKg: reqDec("每公斤單價", { min: 0 }), shippingCost: optDec("運費", { min: 0 }), otherCost: optDec("其他費用", { min: 0 }), reason: reqStr("更正原因") }), async (i, ctx) => {
-    const c = await tx(ctx, (t) => correctGreenCost(t, i.greenLotId, i, ctx.actor));
-    return { message: `已更正，新每克成本 NT$${c.perG.toFixed(4)}；歷史批次與訂單成本不變` };
-  }),
+};
 
-  // ── 烘焙 ──
-  "roast.create": op(
-    z.object({
+/** 烘焙批次表單欄位（新增與修改共用） */
+const roastFields = {
       greenLotId: docId("生豆批次"),
       roasterId: docId("烘豆機"),
       roastedAt: isoDateTime("烘焙日期時間"),
@@ -176,15 +152,62 @@ export const OPS = {
       laborIsEstimate: bool(),
       copiedFromId: optDocId(),
       events: z.array(z.object({ timeSec: optMmSs("事件時間"), type: reqStr("事件類型", 30), btC: optDec("BT"), etC: optDec("ET"), heat: optStr(50), airflow: optStr(50), drumSpeed: optStr(50), note: optStr(200) })).optional().default([]),
+};
+type RoastForm = z.infer<z.ZodObject<typeof roastFields>>;
+function roastInput(i: RoastForm) {
+  const extra: RoastExtraCost[] = [];
+  if (i.energyCost && D(i.energyCost).gt(0)) extra.push({ category: "ROAST_ENERGY", amount: i.energyCost, isEstimate: i.energyIsEstimate, calcNote: i.energyNote });
+  if (i.laborCost && D(i.laborCost).gt(0)) extra.push({ category: "ROAST_LABOR", amount: i.laborCost, isEstimate: i.laborIsEstimate });
+  return { ...i, extraCosts: extra, events: i.events.filter((e) => e.timeSec != null).map((e) => ({ ...e, timeSec: e.timeSec! })) };
+}
+
+export const OPS = {
+  // ── 咖啡豆與生豆 ──
+  "coffee.save": op(coffeeSchema, ({ id, ...d }, ctx) =>
+    tx(ctx, async (t) => {
+      if (d.peakFromDays != null && d.peakToDays != null && d.peakToDays < d.peakFromDays) throw new DomainError("最佳飲用區間結束天數不可早於起始天數");
+      const supplier = d.supplierId ? await t.must(C.suppliers, d.supplierId, "供應商") : null;
+      return upsert(t, C.coffees, id, { ...d, supplierName: supplier?.name ?? null, ...(id ? {} : { archivedAt: null }) }, ctx.actor, { unique: "code", label: "咖啡豆" });
+    }),
+  ),
+  "coffee.archive": op(id, ({ id }, ctx) =>
+    tx(ctx, async (t) => {
+      const c = await t.must(C.coffees, id, "咖啡豆");
+      await t.update(C.coffees, id, { archivedAt: c.archivedAt ? null : nowIso() });
+      audit(t, ctx.actor, "coffee.archive", "Coffee", id, c.archivedAt ? "取消封存" : "封存");
+    }),
+  ),
+  "green.receive": op(
+    z.object({
+      ...greenFields,
+    }),
+    async (i, ctx) => {
+      const r = await tx(ctx, (t) => receiveGreenPurchase(t, i, ctx.actor));
+      return { id: r.greenLot.id, lotId: r.lot.id };
+    },
+  ),
+  "green.update": op(z.object({ id: docId("生豆批次"), ...greenFields }), ({ id, ...i }, ctx) =>
+    tx(ctx, async (t) => {
+      const r = await updateGreenPurchase(t, id, i, ctx.actor);
+      return { id, message: r.recosted ? `已更新，並重算 ${r.recosted} 批烘焙成本` : "已更新生豆採購" };
+    }),
+  ),
+  "green.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteGreenPurchase(t, id, ctx.actor)).then(() => ({ message: "已刪除生豆採購" }))),
+  "green.correctCost": op(z.object({ greenLotId: docId("生豆批次"), unitPricePerKg: reqDec("每公斤單價", { min: 0 }), shippingCost: optDec("運費", { min: 0 }), otherCost: optDec("其他費用", { min: 0 }), reason: reqStr("更正原因") }), async (i, ctx) => {
+    const c = await tx(ctx, (t) => correctGreenCost(t, i.greenLotId, i, ctx.actor));
+    return { message: `已更正，新每克成本 NT$${c.perG.toFixed(4)}；歷史批次與訂單成本不變` };
+  }),
+
+  // ── 烘焙 ──
+  "roast.create": op(
+    z.object({
+      ...roastFields,
       // 平板即時紀錄的曲線點（秒、豆溫、火力、風門、鍋速）
       curvePoints: z.array(z.object({ t: z.number().int().min(0).max(7200), bt: num(-50, 400), heat: num(-1e4, 1e4), air: num(-1e4, 1e4), drum: num(-1e4, 1e4) })).max(500).optional().default([]),
     }),
     async (i, ctx) => {
-      const extra: RoastExtraCost[] = [];
-      if (i.energyCost && D(i.energyCost).gt(0)) extra.push({ category: "ROAST_ENERGY", amount: i.energyCost, isEstimate: i.energyIsEstimate, calcNote: i.energyNote });
-      if (i.laborCost && D(i.laborCost).gt(0)) extra.push({ category: "ROAST_LABOR", amount: i.laborCost, isEstimate: i.laborIsEstimate });
       const r = await tx(ctx, async (t) => {
-        const res = await createRoastBatch(t, { ...i, extraCosts: extra, events: i.events.filter((e) => e.timeSec != null).map((e) => ({ ...e, timeSec: e.timeSec! })) }, ctx.actor);
+        const res = await createRoastBatch(t, roastInput(i), ctx.actor);
         if (i.curvePoints.length) {
           const pts = [...new Map(i.curvePoints.map((p) => [p.t, p])).values()].sort((a, b) => a.t - b.t);
           const points = withComputedRor(pts.map((p) => ({ timeSec: p.t, btC: p.bt ?? null, etC: null, rorC: null, heat: p.heat ?? null, airflow: p.air ?? null, drumSpeed: p.drum ?? null })));
@@ -195,6 +218,14 @@ export const OPS = {
       return { id: r.batch.id };
     },
   ),
+  "roast.update": op(z.object({ id: docId("烘焙批次"), ...roastFields }), ({ id, ...i }, ctx) =>
+    tx(ctx, async (t) => {
+      await updateRoastBatch(t, id, roastInput(i), ctx.actor);
+      await refreshPublishedTraces(t);
+      return { id, message: "已更新烘焙批次" };
+    }),
+  ),
+  "roast.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteRoastBatch(t, id, ctx.actor)).then(() => ({ message: "已刪除烘焙批次，生豆已退回庫存" }))),
   "roast.updateNotes": op(z.object({ id: docId("烘焙批次"), roastLevel: optStr(50), targetProfile: optStr(), result: optStr(), qualityRating: optInt("品質評價", 1, 10), note: optStr() }), ({ id, ...d }, ctx) =>
     tx(ctx, async (t) => {
       await t.update(C.roastBatches, id, { ...d, updatedAt: nowIso() });
@@ -219,6 +250,18 @@ export const OPS = {
       const c = await t.must(C.roastCurves, curveId, "曲線");
       for (const o of await t.query(C.roastCurves, [["roastBatchId", "==", c.roastBatchId]])) await t.update(C.roastCurves, o.id, { isActive: o.id === curveId });
       audit(t, ctx.actor, "curve.activate", "RoastCurve", curveId, "切換使用中曲線");
+    }),
+  ),
+  "curve.delete": op(z.object({ curveId: docId("曲線") }), ({ curveId }, ctx) =>
+    tx(ctx, async (t) => {
+      const c = await t.must(C.roastCurves, curveId, "曲線");
+      const others = (await t.query(C.roastCurves, [["roastBatchId", "==", c.roastBatchId]])).filter((o) => o.id !== curveId).sort((a, b) => String(b.importedAt).localeCompare(String(a.importedAt)));
+      for (let i = 0; i < ((c.chunkCount as number) ?? 0); i++) await t.delete(`${C.roastCurves}/${curveId}/chunks`, String(i));
+      if (c.fileSha256) await t.delete(C.uniq, `curve:${c.roastBatchId}:${c.fileSha256}`);
+      await t.delete(C.roastCurves, curveId);
+      if (c.isActive && others[0] && !others.some((o) => o.isActive)) await t.update(C.roastCurves, others[0].id, { isActive: true });
+      audit(t, ctx.actor, "curve.delete", "RoastCurve", curveId, `刪除曲線 ${c.originalFileName ?? ""}（${c.batchNo}）`);
+      return { message: "已刪除曲線" };
     }),
   ),
 
@@ -428,6 +471,11 @@ export const OPS = {
       return { message: `完成分裝 ${r.packagingBatch.batchNo}，每件成本 NT$${r.unitCost.toFixed(2)}` };
     },
   ),
+  "production.update": op(z.object({ id: docId("生產單"), plannedQty: reqInt("預計生產數量"), fillWeightG: optDec("單包重量", { min: 0 }), plannedDate: isoDate("生產日期"), note: optStr() }), ({ id, ...i }, ctx) =>
+    tx(ctx, (t) => updateProductionOrder(t, id, i, ctx.actor)).then(() => ({ message: "已更新生產單並重新預留熟豆" })),
+  ),
+  "production.reopen": op(id, ({ id }, ctx) => tx(ctx, (t) => reopenProductionOrder(t, id, ctx.actor)).then(() => ({ message: "已撤銷完成：熟豆與包材已退回，可修改後再完成" }))),
+  "production.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteProductionOrder(t, id, ctx.actor)).then(() => ({ message: "已刪除生產單" }))),
   "production.cancel": op(z.object({ id: docId("生產單"), reason: optStr(300) }), (i, ctx) => tx(ctx, (t) => cancelProductionOrder(t, i.id, ctx.actor, { reason: i.reason })).then(() => ({ message: "已取消並釋放熟豆預留" }))),
 
   // ── 商品 ──
@@ -478,6 +526,18 @@ export const OPS = {
       return { id: r.order.id, duplicate: r.duplicate };
     },
   ),
+  /** 任何狀態的訂單都可修改顧客、收件、出貨單號與備註（不影響金額、品項與庫存） */
+  "order.updateInfo": op(
+    z.object({ orderId: docId("訂單"), customerName: reqStr("顧客名稱", 100), customerPhone: optStr(50), customerEmail: optStr(200), shippingAddress: optStr(500), shippingMethod: optStr(100), carrier: optStr(100), trackingNo: optStr(100), note: optStr() }),
+    ({ orderId, carrier, trackingNo, ...d }, ctx) =>
+      tx(ctx, async (t) => {
+        const o = await t.must(C.orders, orderId, "訂單");
+        const shipment = o.shipment ? { ...(o.shipment as object), carrier: carrier ?? null, trackingNo: trackingNo ?? null } : undefined;
+        await t.update(C.orders, orderId, { ...d, ...(shipment ? { shipment } : {}), updatedAt: nowIso() });
+        audit(t, ctx.actor, "order.updateInfo", "SalesOrder", orderId, `修改訂單 ${o.orderNo} 的顧客／收件資訊`);
+        return { message: "已更新訂單資訊" };
+      }),
+  ),
   "order.update": op(
     z.object({
       orderId: docId("訂單"),
@@ -508,6 +568,7 @@ export const OPS = {
   }),
   "order.ship": op(z.object({ orderId: docId("訂單"), carrier: optStr(100), trackingNo: optStr(100), method: optStr(100), shippingCost: optDec("物流成本", { min: 0 }), note: optStr(500) }), ({ orderId, ...i }, ctx) => tx(ctx, (t) => shipOrder(t, orderId, i, ctx.actor)).then(() => ({ message: "已出貨並扣除成品庫存" }))),
   "order.complete": op(z.object({ orderId: docId("訂單") }), (i, ctx) => tx(ctx, (t) => completeOrder(t, i.orderId, ctx.actor)).then(() => ({ message: "訂單已完成" }))),
+  "order.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteOrder(t, id, ctx.actor)).then(() => ({ message: "已刪除訂單，保留的庫存已釋放" }))),
   "order.cancel": op(z.object({ orderId: docId("訂單"), reason: optStr(300), refundAmount: optDec("退款金額", { min: 0 }) }), ({ orderId, ...i }, ctx) => tx(ctx, (t) => cancelOrder(t, orderId, i, ctx.actor)).then(() => ({ message: "訂單已取消，保留已釋放" }))),
   "order.refund": op(z.object({ orderId: docId("訂單"), amount: reqDec("退款金額", { positive: true }), reference: optStr(100), note: optStr(500) }), ({ orderId, ...i }, ctx) => tx(ctx, (t) => recordRefund(t, orderId, i, ctx.actor)).then(() => ({ message: "已記錄退款" }))),
   "order.return": op(z.object({ orderId: docId("訂單"), reason: optStr(500), items: z.array(z.object({ allocationId: docId("分配"), quantity: reqDec("數量", { positive: true }) })).min(1, "請選擇退貨品項") }), ({ orderId, ...i }, ctx) => tx(ctx, (t) => createReturn(t, orderId, i, ctx.actor)).then(() => ({ message: "已建立退貨，商品進入待檢庫存（不可售）" }))),
@@ -553,6 +614,19 @@ export const OPS = {
         if (i.isDefault) for (const o of await t.query(C.cuppingTemplates, [["isDefault", "==", true]])) await t.update(C.cuppingTemplates, o.id, { isDefault: false });
         return upsert(t, C.cuppingTemplates, null, { ...i, attributes: attrs }, ctx.actor, { unique: "name", label: "評分模板" });
       }),
+  ),
+  /** 刪除主檔（供應商、烘豆機、器材、風味詞彙、儲位、顧客、系列、商品、品項、包材、評分模板、配方、咖啡豆、分攤規則）；仍被使用時拒絕 */
+  "master.delete": op(z.object({ col: z.enum(Object.keys(DELETABLE) as [string, ...string[]]), id: docId("資料") }), (i, ctx) =>
+    tx(ctx, (t) => deleteMaster(t, i.col, i.id, ctx.actor)).then(() => ({ message: `已刪除${DELETABLE[i.col].label}` })),
+  ),
+  "cost.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteCostEntry(t, id, ctx.actor)).then(() => ({ message: "已刪除營運費用" }))),
+  /** 修改評分模板的名稱、說明、預設（評分項目不可改，避免舊杯測分數失真） */
+  "template.update": op(z.object({ id: docId("評分模板"), name: reqStr("模板名稱"), description: optStr(), isDefault: boolStr() }), ({ id, ...i }, ctx) =>
+    tx(ctx, async (t) => {
+      if (i.isDefault) for (const o of await t.query(C.cuppingTemplates, [["isDefault", "==", true]])) if (o.id !== id) await t.update(C.cuppingTemplates, o.id, { isDefault: false });
+      await upsert(t, C.cuppingTemplates, id, i, ctx.actor, { unique: "name", label: "評分模板" });
+      return { message: "已更新評分模板" };
+    }),
   ),
   "material.save": op(z.object({ id: optDocId(), code: reqStr("代碼", 40), name: reqStr("名稱"), category: z.enum(["BAG", "LABEL", "DRIP_BAG", "BOX", "SEAL", "OTHER"]), spec: optStr(200), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.materials, id, { ...d, isActive: true }, ctx.actor, { unique: "code", label: "包材" }))),
   "location.save": op(z.object({ id: optDocId(), code: reqStr("代碼", 40), name: reqStr("名稱"), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.locations, id, d, ctx.actor, { unique: "code", label: "儲位" }))),

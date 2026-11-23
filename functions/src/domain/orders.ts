@@ -373,3 +373,24 @@ export async function addOrderCost(tx: Tx, orderId: string, input: { category: s
   tx.create(C.costs, { category: input.category, target: "SALES_ORDER", amount: toDb(input.amount, 2), isEstimate: input.isEstimate ?? false, occurredOn: addDaysYmd(new Date(), 0), roastBatchId: null, productionOrderId: null, orderId, calcNote: input.calcNote ?? null, note: null, createdAt: nowIso() });
   audit(tx, actor, "order.cost", "SalesOrder", orderId, `新增訂單成本 ${input.category} ${input.amount}`);
 }
+
+/**
+ * 刪除訂單：只限尚未出貨、沒有退貨的訂單。會先取消（釋放保留的成品、取消接單後分裝），
+ * 再刪除訂單、明細、分配、付款與訂單成本。已收款且未退款的訂單需先取消並退款。
+ */
+export async function deleteOrder(tx: Tx, orderId: string, actor: Actor) {
+  const o = await tx.must(C.orders, orderId, "訂單");
+  const allocs = await tx.query<AllocationDoc>(C.allocations, [["orderId", "==", orderId]]);
+  if (allocs.some((a) => a.status === "SHIPPED")) throw new InvalidStateError("訂單已出貨，不能刪除（請辦理退貨）");
+  if ((await tx.query(C.returns, [["orderId", "==", orderId]])).length) throw new InvalidStateError("訂單有退貨紀錄，不能刪除");
+  if (o.paymentStatus === "PAID") throw new InvalidStateError("訂單已收款，請先取消並退款後再刪除");
+  if (o.fulfillmentStatus !== "CANCELLED") await cancelOrder(tx, orderId, { reason: "刪除訂單" }, actor);
+  for (const p of await tx.query(C.productionOrders, [["orderId", "==", orderId]])) {
+    if (p.status === "COMPLETED") throw new InvalidStateError(`接單後分裝單 ${p.orderNo} 已完成，請先處理那批成品`);
+    await tx.delete(C.productionOrders, p.id);
+  }
+  for (const col of [C.orderItems, C.allocations, C.payments, C.costs]) for (const d of await tx.query(col, [["orderId", "==", orderId]])) await tx.delete(col, d.id);
+  if (o.externalRef) await tx.releaseUnique("externalRef", o.externalRef as string);
+  await tx.delete(C.orders, orderId);
+  audit(tx, actor, "order.delete", "SalesOrder", orderId, `刪除訂單 ${o.orderNo}（${o.customerName}）`);
+}

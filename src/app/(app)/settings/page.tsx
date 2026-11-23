@@ -18,6 +18,7 @@ import { useAuth } from "@/components/auth";
 import { ActionDialog, type DialogField } from "@/components/action-dialog";
 import { MascotPlaceholder } from "@/components/brand";
 import { DataTable } from "@/components/data-table";
+import { DeleteButton } from "@/components/delete-button";
 import { EntityForm } from "@/components/entity-form";
 import { toast } from "@/components/toast";
 import { Badge, Button, Card, CardBody, CardHeader, LinkButton, Notice, PageHeader, SimpleTable, Tabs } from "@/components/ui";
@@ -91,7 +92,7 @@ function Master({ col, op, title, desc, head, row, fields, extra }: { col: strin
   return (
     <Card>
       <CardHeader title={title} description={desc} action={<>{extra}<ActionDialog label="＋ 新增" size="sm" title={`新增${title}`} fields={fields()} action={opAction(op)} /></>} />
-      <SimpleTable head={[...head, ""]} rows={d.data.map((x) => [...row(x), <ActionDialog key="e" label="編輯" size="sm" variant="ghost" title={`編輯${title}`} payload={{ id: x.id }} fields={fields(x)} action={opAction(op)} />])} empty={d.loading ? "載入中…" : "尚無資料"} />
+      <SimpleTable head={[...head, ""]} rows={d.data.map((x) => [...row(x), <span key="e" className="flex gap-1"><ActionDialog label="編輯" size="sm" variant="ghost" title={`編輯${title}`} payload={{ id: x.id }} fields={fields(x)} action={opAction(op)} /><DeleteButton what={title} name={String(x.name ?? "")} col={col} id={x.id} /></span>])} empty={d.loading ? "載入中…" : "尚無資料"} />
     </Card>
   );
 }
@@ -218,7 +219,7 @@ function Roasters() {
   return (
     <Card>
       <CardHeader title="烘豆機" description="支援 Olomo，但不綁定機型；未提供的通道在烘焙表單中為選填" action={<ActionDialog label="＋ 新增烘豆機" size="sm" title="新增烘豆機" fields={f()} action={opAction("roaster.save")} />} />
-      <SimpleTable head={["名稱", "品牌／型號", "容量", "溫度通道", "火力／風門／轉速", ""]} rows={r.data.map((x) => [x.name, `${x.brand} ${x.model}`, x.maxCapacityG ? `${fmtNum(x.maxCapacityG, 0)} g` : "—", (x.tempChannels ?? []).join("、") || "—", [x.heatControl, x.airflowControl, x.drumSpeedControl].map((y) => y ?? "—").join("／"), <ActionDialog key="e" label="編輯" size="sm" variant="ghost" title="編輯烘豆機" payload={{ id: x.id }} fields={f(x)} action={opAction("roaster.save")} />])} />
+      <SimpleTable head={["名稱", "品牌／型號", "容量", "溫度通道", "火力／風門／轉速", ""]} rows={r.data.map((x) => [x.name, `${x.brand} ${x.model}`, x.maxCapacityG ? `${fmtNum(x.maxCapacityG, 0)} g` : "—", (x.tempChannels ?? []).join("、") || "—", [x.heatControl, x.airflowControl, x.drumSpeedControl].map((y) => y ?? "—").join("／"), <span key="e" className="flex gap-1"><ActionDialog label="編輯" size="sm" variant="ghost" title="編輯烘豆機" payload={{ id: x.id }} fields={f(x)} action={opAction("roaster.save")} /><DeleteButton what="烘豆機" name={x.name} col="roasters" id={x.id} /></span>])} />
     </Card>
   );
 }
@@ -233,7 +234,11 @@ function Templates() {
         description="自訂評分系統，明確標示非 SCA 官方標準。已使用的模板請勿變更評分項目，請建立新模板。"
         action={<ActionDialog label="＋ 新增模板" size="sm" title="新增評分模板" fields={[{ name: "name", label: "名稱", required: true }, { name: "description", label: "說明", defaultValue: "ATA Coffee 自訂評分（非 SCA 官方）" }, { name: "scaleMin", label: "最低分", type: "number", defaultValue: "0" }, { name: "scaleMax", label: "最高分", type: "number", defaultValue: "10" }, { name: "step", label: "間距", type: "number", defaultValue: "0.25" }, { name: "attributes", label: "評分項目（每行 代碼:名稱）", type: "textarea", required: true, defaultValue: "fragrance:乾香\naroma:濕香\nacidity:酸質\nsweetness:甜感\nbody:醇厚度\nbalance:平衡\naftertaste:尾韻\noverall:整體評價" }, { name: "isDefault", label: "設為預設", type: "select", options: [{ value: "false", label: "否" }, { value: "true", label: "是" }] }]} action={opAction("template.create")} />}
       />
-      <SimpleTable head={["名稱", "分數範圍", "評分項目", "使用次數", ""]} rows={t.data.map((x) => [x.name, `${x.scaleMin}–${x.scaleMax}（間距 ${x.step}）`, (x.attributes as Row[]).map((a) => a.label).join("、"), sessions.data.filter((q) => q.templateId === x.id).length, x.isDefault ? <Badge key="d" tone="primary">預設</Badge> : ""])} />
+      <SimpleTable head={["名稱", "分數範圍", "評分項目", "使用次數", ""]} rows={t.data.map((x) => [x.name, `${x.scaleMin}–${x.scaleMax}（間距 ${x.step}）`, (x.attributes as Row[]).map((a) => a.label).join("、"), sessions.data.filter((q) => q.templateId === x.id).length, <span key="d" className="flex items-center gap-1">
+            {x.isDefault && <Badge tone="primary">預設</Badge>}
+            <ActionDialog label="編輯" size="sm" variant="ghost" title="編輯評分模板" description="評分項目不能修改（避免舊杯測分數失真）；改名後杯測紀錄會一起更新。" payload={{ id: x.id }} fields={[{ name: "name", label: "名稱", required: true, defaultValue: x.name }, { name: "description", label: "說明", defaultValue: x.description ?? "" }, { name: "isDefault", label: "設為預設", type: "select", defaultValue: String(!!x.isDefault), options: [{ value: "false", label: "否" }, { value: "true", label: "是" }] }]} action={opAction("template.update")} />
+            {!x.isDefault && <DeleteButton what="評分模板" name={x.name} col="cuppingTemplates" id={x.id} />}
+          </span>])} />
     </Card>
   );
 }

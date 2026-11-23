@@ -9,6 +9,7 @@ import { useCol, useOp } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { downloadCsv } from "@/lib/csv";
 import { ActionDialog } from "@/components/action-dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { Chart } from "@/components/chart";
 import { Button, Card, CardBody, CardHeader, Notice, PageHeader, SimpleTable, StatCard } from "@/components/ui";
 import type { MonthlyReport } from "../../../../functions/src/domain/reports";
@@ -127,7 +128,7 @@ export default function ReportsPage() {
             title="期間營運費用"
             action={<ActionDialog label="＋ 新增" size="sm" variant="outline" title="新增期間營運費用" fields={[{ name: "calcNote", label: "項目說明", required: true }, { name: "amount", label: "金額（TWD）", type: "number", required: true }, { name: "occurredOn", label: "日期", type: "date", required: true, defaultValue: todayTaipei() }, { name: "isEstimate", label: "成本性質", type: "select", options: [{ value: "false", label: "實際" }, { value: "true", label: "估計" }] }]} action={opAction("cost.addPeriod")} />}
           />
-          <SimpleTable head={["日期", "項目", "金額", "性質"]} rows={periodCosts.map((c) => [fmtDbDate(c.occurredOn), c.calcNote ?? "—", fmtMoney(c.amount), c.isEstimate ? "估計" : "實際"])} empty="本月無營運費用" />
+          <SimpleTable head={["日期", "項目", "金額", "性質", ""]} rows={periodCosts.map((c) => [fmtDbDate(c.occurredOn), c.calcNote ?? "—", fmtMoney(c.amount), c.isEstimate ? "估計" : "實際", <DeleteButton key="d" what="營運費用" name={c.calcNote} id={c.id} op="cost.delete" />])} empty="本月無營運費用" />
         </Card>
       </div>
       <Card className="mt-6">
@@ -136,7 +137,7 @@ export default function ReportsPage() {
           description="保存估計成本的計算方式（例：烘焙能源每批 NT$18）。第一版作為輸入參考，套用時請於烘焙／分裝表單填入並註記計算方式。"
           action={<ActionDialog label="＋ 新增規則" size="sm" variant="outline" title="新增成本分攤規則" fields={[{ name: "name", label: "規則名稱", required: true }, { name: "category", label: "成本類別", type: "select", options: Object.entries(COST_CATEGORY).map(([value, label]) => ({ value, label })) }, { name: "method", label: "分攤方式", type: "select", options: Object.entries(METHOD).map(([value, label]) => ({ value, label })) }, { name: "rate", label: "費率（金額或百分比）", type: "number", required: true }, { name: "description", label: "說明", type: "textarea" }]} action={opAction("cost.addRule")} />}
         />
-        <SimpleTable head={["名稱", "類別", "方式", "費率", "說明"]} rows={rules.data.map((x) => [x.name, COST_CATEGORY[x.category] ?? x.category, METHOD[x.method] ?? x.method, fmtNum(x.rate, 4), x.description ?? "—"])} empty="尚無規則" />
+        <SimpleTable head={["名稱", "類別", "方式", "費率", "說明", ""]} rows={rules.data.map((x) => [x.name, COST_CATEGORY[x.category] ?? x.category, METHOD[x.method] ?? x.method, fmtNum(x.rate, 4), x.description ?? "—", <DeleteButton key="d" what="分攤規則" name={x.name} col="costRules" id={x.id} />])} empty="尚無規則" />
       </Card>
     </>
   );

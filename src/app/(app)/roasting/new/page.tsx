@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { fmtSec, nowTaipeiLocal } from "@/lib/time";
+import { fmtSec, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
 import { opts, ROAST_EVENT } from "@/lib/labels";
@@ -10,34 +10,46 @@ import { EntityForm } from "@/components/entity-form";
 import { LinkButton, Notice, PageHeader } from "@/components/ui";
 import { clearLive, liveToRoastForm, loadLive } from "../live-draft";
 
-const s = (v: unknown) => (v == null ? "" : String(v));
+/** 帶入表單：去掉小數尾端多餘的 0（255.000 → 255） */
+const s = (v: unknown) => (v == null ? "" : String(v).replace(/^(-?\d+)\.(\d*?)0+$/, (_, a: string, b: string) => (b ? `${a}.${b}` : a)));
 const mm = (v: number | null | undefined) => (v == null ? "" : fmtSec(v));
 
+/** 新增烘焙批次；?copy=<id> 複製設定，?edit=<id> 修改已過帳的批次，?live=1 過帳平板即時紀錄 */
 export default function NewRoastPage() {
-  const copy = useQS("copy");
+  const editId = useQS("edit");
+  const copyQS = useQS("copy");
+  const copy = editId ?? copyQS;
   const green = useQS("green");
-  const greens = useGreenLotOptions();
   const roasters = useCol("roasters", [], "name", false);
   const src = useDocument("roastBatches", copy);
+  const greens = useGreenLotOptions(editId ? (src.data?.greenLotId as string | undefined) : null);
   const costs = useCol(copy ? "costEntries" : null, [["roastBatchId", copy]]);
   const fromLive = useQS("live") === "1";
-  const here = fromLive ? "/roasting/new/?live=1" : copy ? `/roasting/new/?copy=${copy}` : "/roasting/new/";
+  const here = fromLive ? "/roasting/new/?live=1" : editId ? `/roasting/new/?edit=${editId}` : copy ? `/roasting/new/?copy=${copy}` : "/roasting/new/";
   const [live] = useState(() => {
     if (!fromLive || typeof window === "undefined") return null;
     const d = loadLive();
     return d ? liveToRoastForm(d) : null;
   });
   return (
-    <Guard loading={roasters.loading || (!!copy && (src.loading || costs.loading))}>
+    <Guard loading={roasters.loading || (!!copy && (src.loading || costs.loading))} missing={!!editId && !src.data}>
       {() => {
         const b = src.data;
+        const edit = !!editId && !!b;
         const cost = (cat: string) => costs.data.find((c) => c.category === cat);
         const defaults = {
           greenLotId: green ?? s(b?.greenLotId),
           roasterId: s(b?.roasterId ?? roasters.data[0]?.id),
-          roastedAt: nowTaipeiLocal(),
+          roastedAt: edit ? toTaipeiLocalInput(new Date(b.roastedAt as string)) : nowTaipeiLocal(),
           greenWeightG: s(b?.greenWeightG),
-          roastedWeightG: "",
+          roastedWeightG: edit ? s(b?.roastedWeightG) : "",
+          qualityRating: edit ? s(b?.qualityRating) : "",
+          result: edit ? s(b?.result) : "",
+          note: edit ? s(b?.note) : "",
+          restStartDays: edit ? s(b?.restStartDays) : "",
+          peakFromDays: edit ? s(b?.peakFromDays) : "",
+          peakToDays: edit ? s(b?.peakToDays) : "",
+          shelfLifeDays: edit ? s(b?.shelfLifeDays) : "",
           chargeTempC: s(b?.chargeTempC),
           turningPointSec: mm(b?.turningPointSec),
           turningPointTempC: s(b?.turningPointTempC),
@@ -53,13 +65,20 @@ export default function NewRoastPage() {
           energyNote: s(cost("ROAST_ENERGY")?.calcNote),
           laborCost: s(cost("ROAST_LABOR")?.amount),
           laborIsEstimate: cost("ROAST_LABOR")?.isEstimate ?? true,
-          copiedFromId: s(b?.id),
+          copiedFromId: edit ? s(b?.copiedFromId) : s(b?.id),
           ...(live?.defaults ?? {}),
-          events: ((b?.events as Array<Record<string, unknown>>) ?? []).filter((e) => ["HEAT_CHANGE", "AIRFLOW_CHANGE", "DRUM_CHANGE", "NOTE"].includes(e.type as string)).map((e) => ({ timeSec: fmtSec(e.timeSec as number), type: e.type, btC: "", heat: s(e.heat), airflow: s(e.airflow), note: s(e.note) })),
+          events: ((b?.events as Array<Record<string, unknown>>) ?? []).filter((e) => edit || ["HEAT_CHANGE", "AIRFLOW_CHANGE", "DRUM_CHANGE", "NOTE"].includes(e.type as string)).map((e) => ({ timeSec: fmtSec(e.timeSec as number), type: e.type, btC: edit ? s(e.btC) : "", heat: s(e.heat), airflow: s(e.airflow), note: s(e.note) })),
         };
         return (
           <>
-            <PageHeader title={live ? "過帳平板即時紀錄" : b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} back={{ href: "/roasting/", label: "烘豆紀錄" }} />
+            <PageHeader title={live ? "過帳平板即時紀錄" : edit ? `修改 ${b.batchNo}` : b ? `複製批次 ${b.batchNo} 的設定` : "開始新一批烘焙"} back={edit ? { href: `/roasting/view/?id=${b.id}`, label: b.batchNo } : { href: "/roasting/", label: "烘豆紀錄" }} />
+            {edit && (
+              <div className="mb-4">
+                <Notice>
+                  <span title="改生豆批次、重量或成本時，會自動補扣或退回生豆、調整熟豆庫存與成本；杯測、手沖的烘後天數與 QR 履歷也會一起更新。熟豆已分裝或出貨後，重量與成本不能再改。">修改後，庫存、成本與相關紀錄會自動一起更新。</span>
+                </Notice>
+              </div>
+            )}
             {live && (
               <div className="mb-4">
                 <Notice>
@@ -87,10 +106,10 @@ export default function NewRoastPage() {
               </Notice>
             ) : (
               <EntityForm
-                key={greens.length}
+                key={`${greens.length}-${b?.updatedAt ?? ""}`}
                 draftKey={b || live ? undefined : "roast-new"}
-                submitLabel="過帳烘焙批次"
-                successMessage="烘焙批次已建立"
+                submitLabel={edit ? "儲存修改" : "過帳烘焙批次"}
+                successMessage={edit ? "已更新烘焙批次" : "烘焙批次已建立"}
                 defaultValues={defaults}
                 sections={[
                   { key: "a", title: "批次與重量" },
@@ -145,7 +164,7 @@ export default function NewRoastPage() {
                   { name: "peakToDays", label: "覆寫：最佳區間迄", type: "number", unit: "天", section: "e" },
                   { name: "shelfLifeDays", label: "覆寫：保存期限", type: "number", unit: "天", section: "e", hint: "留空使用咖啡豆預設" },
                 ]}
-                action={opAction("roast.create", live ? { curvePoints: live.curvePoints } : undefined, (d) => {
+                action={opAction(edit ? "roast.update" : "roast.create", edit ? { id: b.id } : live ? { curvePoints: live.curvePoints } : undefined, (d) => {
                   if (live) clearLive();
                   return `/roasting/view/?id=${d.id}`;
                 })}

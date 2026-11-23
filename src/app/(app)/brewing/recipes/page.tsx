@@ -5,6 +5,7 @@ import { fmtDate, fmtSec } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol } from "@/lib/data";
 import { ActionDialog } from "@/components/action-dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { A, Badge, Card, LinkButton, PageHeader, SimpleTable, Tabs } from "@/components/ui";
 
 export default function RecipesPage() {
@@ -31,6 +32,7 @@ export default function RecipesPage() {
             <span key="a" className="flex gap-2">
               <A href={`/brewing/new/?recipe=${x.id}`}>使用</A>
               <ActionDialog label={x.isRecommended ? "取消推薦" : "推薦"} size="sm" variant="ghost" title="切換推薦配方？" payload={{ id: x.id }} action={opAction("recipe.toggleRecommended")} />
+              <DeleteButton what="配方" name={`${x.name} v${x.version}`} col="brewRecipes" id={x.id} description="已被手沖紀錄使用、或設為品牌系列推薦的配方不能刪除。" />
             </span>,
           ])}
           empty={r.loading ? "載入中…" : "尚無配方"}

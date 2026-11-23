@@ -9,7 +9,8 @@ import { useCol, useDocument } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { ActionDialog } from "@/components/action-dialog";
 import { StatusBadge } from "@/components/status";
-import { A, Badge, Card, CardBody, CardHeader, KV, PageHeader, SimpleTable } from "@/components/ui";
+import { A, Badge, Card, CardBody, CardHeader, KV, LinkButton, PageHeader, SimpleTable } from "@/components/ui";
+import { DeleteButton } from "@/components/delete-button";
 
 const TX: Record<string, string> = { RECEIPT: "入庫", ROAST_ISSUE: "烘焙領料", ROAST_OUTPUT: "烘焙產出", CUPPING_USE: "杯測耗用", TASTING_USE: "試喝耗用", SAMPLE_GIFT: "樣品贈送", PACKAGING_ISSUE: "分裝耗用", PACKAGING_LOSS: "分裝損耗", PACKAGING_OUTPUT: "分裝產出", MATERIAL_ISSUE: "包材耗用", SCRAP: "報廢", ADJUSTMENT: "盤點調整", SHIPMENT_ISSUE: "出貨扣帳", RETURN_QUARANTINE: "退貨待檢", RETURN_RESTOCK_OUT: "退貨轉出待檢區", RETURN_RESTOCK_IN: "退貨重新入庫", REVERSAL: "沖銷" };
 const MANUAL = ["CUPPING_USE", "TASTING_USE", "SAMPLE_GIFT", "SCRAP", "ADJUSTMENT"];
@@ -57,20 +58,17 @@ export default function LotPage() {
                     <ActionDialog label={l.status === "HOLD" ? "解除品質保留" : "品質保留"} variant="outline" title={l.status === "HOLD" ? "解除品質保留（恢復可售）" : "設為品質保留（不可售）"} payload={{ lotId: l.id, status: l.status === "HOLD" ? "AVAILABLE" : "HOLD" }} fields={[{ name: "note", label: "原因", required: true }]} action={opAction("inventory.lotStatus")} />
                   )}
                   {green.data && (
-                    <ActionDialog
-                      label="成本更正"
-                      variant="ghost"
-                      title="生豆成本更正"
-                      description="只影響此批次剩餘庫存之後續交易；已建立的烘焙批次、成品與訂單成本快照不變。"
-                      payload={{ greenLotId: green.data.id }}
-                      fields={[
-                        { name: "unitPricePerKg", label: "每公斤單價", type: "number", required: true, defaultValue: green.data.unitPricePerKg },
-                        { name: "shippingCost", label: "運費", type: "number", defaultValue: green.data.shippingCost },
-                        { name: "otherCost", label: "其他費用", type: "number", defaultValue: green.data.otherCost },
-                        { name: "reason", label: "更正原因", required: true },
-                      ]}
-                      action={opAction("green.correctCost")}
-                    />
+                    <>
+                      <LinkButton href={`/green/new/?edit=${green.data.id}`} variant="secondary">
+                        修改採購
+                      </LinkButton>
+                      <DeleteButton inline={false} what="生豆採購" name={green.data.lotCode} id={green.data.id} op="green.delete" redirectTo="/green/" description="這批生豆的庫存會一起移除。已經烘焙過、或有盤點報廢等異動的批次不能刪除。" />
+                    </>
+                  )}
+                  {l.roastBatchId && (
+                    <LinkButton href={`/roasting/new/?edit=${l.roastBatchId}`} variant="secondary">
+                      修改烘焙紀錄
+                    </LinkButton>
                   )}
                 </>
               }

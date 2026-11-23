@@ -49,9 +49,10 @@ export function useCoffeeOptions(): Opt[] {
   return data.filter((c) => !c.archivedAt).map((c) => ({ value: c.id, label: `${c.code}｜${c.nameZh}` }));
 }
 
-export function useGreenLotOptions(): Opt[] {
+/** 有庫存的生豆批次；include 為修改時目前使用的生豆批次（即使已用完也列出） */
+export function useGreenLotOptions(include?: string | null): Opt[] {
   const { data } = useCol("invLots", [["kind", "GREEN"]], "createdAt");
-  return data.filter((l) => D(l.onHand).gt(0) && l.greenLotId).map((l) => ({ value: l.greenLotId, label: `${l.lotCode}｜${String(l.itemName).replace("生豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(0)}g）` }));
+  return data.filter((l) => l.greenLotId && (D(l.onHand).gt(0) || l.greenLotId === include)).map((l) => ({ value: l.greenLotId, label: `${l.lotCode}｜${String(l.itemName).replace("生豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(0)}g）` }));
 }
 
 export function useRoastedLotOptions(): Opt[] {

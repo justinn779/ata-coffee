@@ -6,6 +6,7 @@ import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { ActionDialog } from "@/components/action-dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { A, Card, CardBody, CardHeader, KV, LinkButton, PageHeader, SimpleTable } from "@/components/ui";
 
 export default function CoffeeDetail() {
@@ -33,6 +34,7 @@ export default function CoffeeDetail() {
                     編輯
                   </LinkButton>
                   <ActionDialog label={x.archivedAt ? "取消封存" : "封存"} variant="ghost" title={x.archivedAt ? "取消封存？" : "封存此咖啡豆？"} description="封存後不會出現在新增表單選項中，歷史資料保留。" payload={{ id: x.id }} action={opAction("coffee.archive")} />
+                  <DeleteButton inline={false} what="咖啡豆" name={x.nameZh} col="coffees" id={x.id} redirectTo="/coffees/" description="只有還沒有採購、烘焙或商品使用的咖啡豆可以刪除；已使用的請改用「封存」。" />
                 </>
               }
             />

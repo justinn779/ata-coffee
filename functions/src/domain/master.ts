@@ -4,6 +4,7 @@ import { D, toDb } from "../../../src/lib/decimal";
 import { DomainError } from "../../../src/lib/errors";
 import { nowIso, type Doc, type Tx } from "../tx";
 import { C, type Actor, type InvLot } from "../types";
+import { cascadeAfterSave } from "./cascade";
 import { audit, nextNumber } from "./core";
 import { createLot, ensureMaterialItem, ensureVariantItem, post } from "./inventory";
 
@@ -12,10 +13,11 @@ type Data = Record<string, unknown>;
 /** 通用新增／更新：處理唯一欄位（code、sku…）與稽核 */
 export async function upsert(tx: Tx, col: string, id: string | null | undefined, data: Data, actor: Actor, opts: { unique?: string; label: string }): Promise<Doc> {
   const now = nowIso();
+  const before = id ? { ...(await tx.must(col, id, opts.label)) } : null;
   if (opts.unique) {
     const val = String(data[opts.unique]);
     if (id) {
-      const prev = await tx.must(col, id, opts.label);
+      const prev = before!;
       if (prev[opts.unique] !== val) {
         await tx.claimUnique(`${col}.${opts.unique}`, val, `${opts.label}代碼「${val}」已存在`);
         await tx.releaseUnique(`${col}.${opts.unique}`, String(prev[opts.unique]));
@@ -24,6 +26,7 @@ export async function upsert(tx: Tx, col: string, id: string | null | undefined,
   }
   const doc: Doc = id ? await tx.update(col, id, { ...data, updatedAt: now }) : (tx.create(col, { ...data, createdAt: now, updatedAt: now }) as Doc);
   audit(tx, actor, `${col}.${id ? "update" : "create"}`, col, doc.id, `${id ? "更新" : "新增"}${opts.label}`);
+  await cascadeAfterSave(tx, col, doc, before);
   return doc;
 }
 
