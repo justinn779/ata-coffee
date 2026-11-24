@@ -163,6 +163,27 @@ test("平板烘豆即時紀錄：每 30 秒記錄 → 下豆 → 過帳並存成
   await page.getByLabel("火力起始值").fill("60");
   await page.getByRole("button", { name: "入豆・開始計時" }).click();
 
+  // 平板橫放／直放：整個畫面剛好塞滿，不需要上下捲動；鍵盤是一般數字鍵盤排列（1 2 3 在上，最下排 . 0 刪除）
+  for (const [w, h, name] of [[1180, 820, "landscape"], [820, 1180, "portrait"], [1024, 768, "landscape-small"]] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await expect(page.getByRole("button", { name: "記錄 0:00" })).toBeInViewport({ ratio: 1 });
+    const overflow = await page.evaluate(() => {
+      const box = document.querySelector(".roast-live")!.parentElement!;
+      return box.scrollHeight - box.clientHeight;
+    });
+    expect(overflow, `${name} 不應需要捲動`).toBeLessThanOrEqual(1);
+    if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/live-${name}.png` });
+  }
+  const keyBox = async (k: string) => (await page.getByRole("button", { name: k, exact: true }).boundingBox())!;
+  const [k1, k3, k7, k0, kDot, kDel] = await Promise.all(["1", "3", "7", "0", ".", "刪除一位"].map(keyBox));
+  expect(k1.y).toBeLessThan(k7.y);
+  expect(k3.x).toBeGreaterThan(k1.x);
+  expect(Math.abs(kDot.y - k0.y)).toBeLessThan(2);
+  expect(Math.abs(kDel.y - k0.y)).toBeLessThan(2);
+  expect(kDot.x).toBeLessThan(k0.x);
+  expect(kDel.x).toBeGreaterThan(k0.x);
+  await page.setViewportSize({ width: 1280, height: 720 });
+
   const keypad = async (v: string) => {
     for (const c of v) await page.getByRole("button", { name: c, exact: true }).click();
   };

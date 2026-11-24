@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, Delete, Volume2, VolumeX } from "lucide-react";
+import { ChevronLeft, Minus, Plus, Delete, Volume2, VolumeX } from "lucide-react";
 import { fmtSec, nowTaipeiLocal } from "@/lib/time";
 import { useCol } from "@/lib/data";
 import { useGreenLotOptions } from "@/lib/page";
@@ -30,7 +31,7 @@ export default function RoastLivePage() {
   if (!ready) return null;
   return (
     <>
-      <PageHeader title="烘豆即時紀錄" description={d ? undefined : "平板邊烘邊記：每 30 秒一個紀錄點，記錄豆溫、火力、風門、鍋速"} back={{ href: "/roasting/", label: "烘豆紀錄" }} />
+      {!d && <PageHeader title="烘豆即時紀錄" description="平板邊烘邊記：每 30 秒一個紀錄點，記錄豆溫、火力、風門、鍋速" back={{ href: "/roasting/", label: "烘豆紀錄" }} />}
       {d ? (
         <Running
           d={d}
@@ -190,6 +191,8 @@ function Setup({ onStart }: { onStart: (d: LiveDraft) => void }) {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const show = (v: number | null | undefined) => (v == null ? "—" : String(v));
+/** 與手機／平板數字鍵盤相同：1 2 3 在上，最下排是 小數點、0、刪除 */
+const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "del"];
 
 function Running({ d, update, onDiscard }: { d: LiveDraft; update: (fn: (x: LiveDraft) => LiveDraft) => void; onDiscard: () => void }) {
   const router = useRouter();
@@ -280,44 +283,87 @@ function Running({ d, update, onDiscard }: { d: LiveDraft; update: (fn: (x: Live
   const nextMark = (Math.floor(elapsed / STEP) + 1) * STEP;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-      {/* 左：計時、輸入 */}
-      <div className="grid content-start gap-4">
-        <Card className={cn("p-4 transition-colors", flash && "bg-primary-soft")}>
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-xs text-muted">{live ? "入豆後經過" : "已下豆"}</p>
-              <p className="font-mono text-6xl font-semibold tabular-nums" aria-live="off">
-                {fmtSec(elapsed)}
-              </p>
-            </div>
-            <div className="text-right text-sm text-muted">
-              {live ? (
-                <>
-                  下一個紀錄點 <b className="text-fg">{fmtSec(nextMark)}</b>
-                  <br />
-                  還有 {nextMark - elapsed} 秒
-                </>
-              ) : (
-                <>總時間 {fmtSec(elapsed)}</>
-              )}
-              <button type="button" onClick={() => update((x) => ({ ...x, beep: !x.beep }))} className="ml-auto mt-1 flex items-center gap-1 rounded-lg px-2 py-1 text-xs hover:bg-surface-2" aria-label={d.beep ? "關閉提示音" : "開啟提示音"}>
-                {d.beep ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                {d.beep ? "提示音開" : "提示音關"}
-              </button>
-            </div>
+    <div className="fixed inset-0 z-40 overflow-y-auto bg-bg text-fg">
+      <div className="roast-live p-3">
+        {/* 上：計時列 */}
+        <div data-area="top" className={cn("flex items-center gap-3 rounded-2xl border border-border bg-surface px-3 py-2 transition-colors", flash && "bg-primary-soft")}>
+          <Link href="/roasting/" className="flex h-12 items-center gap-1 rounded-xl px-2 text-sm text-muted hover:bg-surface-2" title="離開這頁（紀錄會保留，回來可繼續）">
+            <ChevronLeft size={22} />
+            離開
+          </Link>
+          <div className="shrink-0">
+            <p className="text-xs text-muted">{live ? "入豆後經過" : "已下豆"}</p>
+            <p className="font-mono text-5xl font-semibold leading-none tabular-nums" aria-live="off">
+              {fmtSec(elapsed)}
+            </p>
           </div>
-          {live && (
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-2">
-              <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${progress}%` }} />
+          <div className="min-w-0 flex-1 px-2">
+            {live ? (
+              <>
+                <p className="text-sm text-muted">
+                  下一個紀錄點 <b className="text-fg">{fmtSec(nextMark)}</b>・還有 {nextMark - elapsed} 秒
+                </p>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-2">
+                  <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${progress}%` }} />
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted">總時間 {fmtSec(elapsed)}</p>
+            )}
+          </div>
+          <button type="button" onClick={() => update((x) => ({ ...x, beep: !x.beep }))} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface-2" aria-label={d.beep ? "關閉提示音" : "開啟提示音"} title={d.beep ? "提示音開" : "提示音關"}>
+            {d.beep ? <Volume2 size={22} /> : <VolumeX size={22} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.confirm("放棄這次紀錄？已記的資料會刪除，無法復原。") && onDiscard()}
+            className="flex h-12 shrink-0 items-center rounded-xl px-3 text-sm text-danger hover:bg-danger-soft"
+          >
+            放棄
+          </button>
+        </div>
+
+        {/* 火力／風門／鍋速、事件（下豆後改為摘要） */}
+        <div data-area="ctl" className="grid content-start gap-3">
+          <div className="grid grid-cols-3 gap-2" title={editing == null && live ? "調整會直接記在目前的紀錄點，之後沿用" : undefined}>
+            {CTL.map(([k, label]) => (
+              <div key={k} className="rounded-xl border border-border bg-surface p-2">
+                <div className="flex items-baseline justify-between px-1">
+                  <span className="text-sm text-muted">{label}</span>
+                  <span className="font-mono text-3xl font-semibold tabular-nums">{show(curCtl[k])}</span>
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  <button type="button" onClick={() => changeCtl(k, -1)} className="flex h-12 items-center justify-center rounded-lg bg-surface-2 active:bg-primary-soft" aria-label={`${label}減少`}>
+                    <Minus size={26} />
+                  </button>
+                  <button type="button" onClick={() => changeCtl(k, 1)} className="flex h-12 items-center justify-center rounded-lg bg-surface-2 active:bg-primary-soft" aria-label={`${label}增加`}>
+                    <Plus size={26} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {live && editing == null && (
+            <div className="grid grid-cols-5 gap-2">
+              {(Object.keys(EVENT_LABEL) as EventKey[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => markEvent(k)}
+                  className={cn("flex h-14 flex-col items-center justify-center rounded-xl border text-base font-medium leading-tight", k === "DROP" ? "border-danger bg-danger text-primary-fg" : d.events[k] ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface")}
+                >
+                  {EVENT_LABEL[k]}
+                  {d.events[k] && <span className="text-xs font-normal">{fmtSec(d.events[k]!.t)}</span>}
+                </button>
+              ))}
             </div>
           )}
-        </Card>
+          {!live && <DropSummary d={d} onContinue={() => update((x) => ({ ...x, droppedAt: null, events: { ...x.events, DROP: undefined } }))} onSubmit={() => router.push("/roasting/new/?live=1")} />}
+        </div>
 
-        {!live && <DropSummary d={d} onContinue={() => update((x) => ({ ...x, droppedAt: null, events: { ...x.events, DROP: undefined } }))} onSubmit={() => router.push("/roasting/new/?live=1")} />}
-
-        <Card className="p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
+        {/* 豆溫輸入：一般數字鍵盤排列 */}
+        <div data-area="pad" className="flex min-h-0 flex-col gap-2 rounded-2xl border border-border bg-surface p-3">
+          <div className="flex h-8 shrink-0 items-center justify-between gap-2">
             <p className="text-sm text-muted">
               {editing != null ? (
                 <>
@@ -330,114 +376,74 @@ function Running({ d, update, onDiscard }: { d: LiveDraft; update: (fn: (x: Live
               )}
             </p>
             {editing != null && (
-              <button type="button" onClick={cancelEdit} className="rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-surface-2">
-                取消修改
-              </button>
+              <span className="flex gap-1">
+                {d.rows[editing] && (
+                  <button type="button" className="rounded-lg px-2 py-1 text-sm text-danger hover:bg-danger-soft" onClick={() => { removeRow(editing); cancelEdit(); }}>
+                    刪除這列
+                  </button>
+                )}
+                <button type="button" onClick={cancelEdit} className="rounded-lg px-2 py-1 text-sm text-muted hover:bg-surface-2">
+                  取消修改
+                </button>
+              </span>
             )}
           </div>
-          <div className="mb-3 flex h-20 items-center justify-end rounded-xl border border-border-strong bg-surface-2 px-5 font-mono text-5xl tabular-nums" aria-label="輸入的豆溫">
+          <div className="flex h-16 shrink-0 items-center justify-end rounded-xl border border-border-strong bg-surface-2 px-5 font-mono text-5xl tabular-nums" aria-label="輸入的豆溫">
             {entry || <span className="text-muted">{show(d.rows[mark]?.bt ?? null)}</span>}
             <span className="ml-2 text-2xl text-muted">°C</span>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            {["7", "8", "9", "del", "4", "5", "6", ".", "1", "2", "3", "0"].map((k) => (
-              <button key={k} type="button" onClick={() => key(k)} className="flex h-16 items-center justify-center rounded-xl border border-border bg-surface text-3xl font-medium active:bg-primary-soft" aria-label={k === "del" ? "刪除一位" : k}>
+          <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-3 gap-2">
+            {KEYS.map((k) => (
+              <button key={k} type="button" onClick={() => key(k)} className={cn("flex min-h-14 items-center justify-center rounded-xl border border-border text-3xl font-medium active:bg-primary-soft", k === "del" || k === "." ? "bg-surface-2" : "bg-surface")} aria-label={k === "del" ? "刪除一位" : k}>
                 {k === "del" ? <Delete size={28} /> : k}
               </button>
             ))}
           </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {CTL.map(([k, label]) => (
-              <div key={k} className="rounded-xl border border-border p-2 text-center">
-                <p className="text-sm text-muted">{label}</p>
-                <p className="my-1 font-mono text-3xl font-semibold tabular-nums">{show(curCtl[k])}</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button type="button" onClick={() => changeCtl(k, -1)} className="flex h-14 items-center justify-center rounded-lg bg-surface-2 active:bg-primary-soft" aria-label={`${label}減少`}>
-                    <Minus size={26} />
-                  </button>
-                  <button type="button" onClick={() => changeCtl(k, 1)} className="flex h-14 items-center justify-center rounded-lg bg-surface-2 active:bg-primary-soft" aria-label={`${label}增加`}>
-                    <Plus size={26} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          {editing == null && live && <p className="mt-2 text-xs text-muted">調整火力／風門／鍋速會直接記在目前的紀錄點，之後沿用。</p>}
-
-          <button type="button" onClick={record} className="mt-4 h-20 w-full rounded-2xl bg-primary text-2xl font-semibold text-primary-fg active:opacity-80">
+          <button type="button" onClick={record} className="h-16 shrink-0 rounded-2xl bg-primary text-2xl font-semibold text-primary-fg active:opacity-80">
             {editing != null ? `儲存 ${fmtSec(editing)}` : `記錄 ${fmtSec(mark)}`}
           </button>
+        </div>
 
-          {live && editing == null && (
-            <div className="mt-4 grid grid-cols-5 gap-2">
-              {(Object.keys(EVENT_LABEL) as EventKey[]).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => markEvent(k)}
-                  className={cn("flex h-16 flex-col items-center justify-center rounded-xl border text-base font-medium", k === "DROP" ? "border-danger bg-danger text-primary-fg" : d.events[k] ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface")}
-                >
-                  {EVENT_LABEL[k]}
-                  {d.events[k] && <span className="text-xs font-normal">{fmtSec(d.events[k]!.t)}</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* 右：曲線與紀錄表 */}
-      <div className="grid content-start gap-4">
-        <Card className="p-3">
-          <MiniChart d={d} elapsed={elapsed} />
-        </Card>
-        <Card className="overflow-hidden">
-          <table className="w-full text-center text-lg tabular-nums">
-            <thead className="bg-surface-2 text-sm text-muted">
-              <tr>
-                <th className="py-2">時間</th>
-                <th>豆溫</th>
-                <th>RoR</th>
-                <th>火力</th>
-                <th>風門</th>
-                <th>鍋速</th>
-              </tr>
-            </thead>
-            <tbody>
-              {marks.map((t) => {
-                const r = d.rows[t];
-                const ev = eventsAt(t);
-                const ror = rorAt(rows, t);
-                return (
-                  <tr key={t} onClick={() => startEdit(t)} className={cn("cursor-pointer border-t border-border", t === mark && "bg-primary-soft/60", t === editing && "outline-2 outline-primary")}>
-                    <td className="py-2.5 font-mono">
-                      {fmtSec(t)}
-                      {ev.length > 0 && <div className="text-xs text-primary">{ev.join("、")}</div>}
-                    </td>
-                    <td className="font-semibold">{show(r?.bt)}</td>
-                    <td className="text-sm text-muted">{ror == null ? "—" : ror.toFixed(1)}</td>
-                    <td>{show(r?.heat)}</td>
-                    <td>{show(r?.air)}</td>
-                    <td>{show(r?.drum)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <p className="border-t border-border px-3 py-2 text-xs text-muted">點任一列可修改該時間點的紀錄。{editing != null && d.rows[editing] && (
-            <button type="button" className="ml-2 text-danger underline" onClick={() => { removeRow(editing); cancelEdit(); }}>
-              刪除 {fmtSec(editing)} 這列
-            </button>
-          )}</p>
-        </Card>
-        <button
-          type="button"
-          onClick={() => window.confirm("放棄這次紀錄？已記的資料會刪除，無法復原。") && onDiscard()}
-          className="justify-self-start rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger-soft"
-        >
-          放棄這次紀錄
-        </button>
+        {/* 曲線與紀錄表（表格在框內自己捲動） */}
+        <div data-area="log" className="flex min-h-0 flex-col gap-3">
+          <div className="shrink-0 rounded-2xl border border-border bg-surface p-2">
+            <MiniChart d={d} elapsed={elapsed} />
+          </div>
+          <div className="max-h-[60vh] min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-surface [@media(min-width:700px)_and_(min-height:560px)]:max-h-none" title="點任一列可修改該時間點的紀錄">
+            <table className="w-full text-center text-lg tabular-nums">
+              <thead className="sticky top-0 bg-surface-2 text-sm text-muted">
+                <tr>
+                  <th className="py-2">時間</th>
+                  <th>豆溫</th>
+                  <th>RoR</th>
+                  <th>火力</th>
+                  <th>風門</th>
+                  <th>鍋速</th>
+                </tr>
+              </thead>
+              <tbody>
+                {marks.map((t) => {
+                  const r = d.rows[t];
+                  const ev = eventsAt(t);
+                  const ror = rorAt(rows, t);
+                  return (
+                    <tr key={t} onClick={() => startEdit(t)} className={cn("cursor-pointer border-t border-border", t === mark && "bg-primary-soft/60", t === editing && "outline-2 outline-primary")}>
+                      <td className="py-2 font-mono">
+                        {fmtSec(t)}
+                        {ev.length > 0 && <div className="text-xs text-primary">{ev.join("、")}</div>}
+                      </td>
+                      <td className="font-semibold">{show(r?.bt)}</td>
+                      <td className="text-sm text-muted">{ror == null ? "—" : ror.toFixed(1)}</td>
+                      <td>{show(r?.heat)}</td>
+                      <td>{show(r?.air)}</td>
+                      <td>{show(r?.drum)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -448,7 +454,7 @@ function DropSummary({ d, onContinue, onSubmit }: { d: LiveDraft; onContinue: ()
   const fc = d.events.FC_START?.t;
   const dev = fc != null ? total - fc : null;
   return (
-    <Card className="border-primary p-4">
+    <Card className="border-primary p-3">
       <p className="text-lg font-semibold">已下豆</p>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
         <div>
@@ -500,7 +506,7 @@ function MiniChart({ d, elapsed }: { d: LiveDraft; elapsed: number }) {
   const ticks: number[] = [];
   for (let t = 0; t <= maxT; t += maxT > 900 ? 120 : 60) ticks.push(t);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="豆溫與 RoR 曲線">
+    <svg viewBox={`0 0 ${W} ${H}`} className="max-h-[30dvh] w-full" role="img" aria-label="豆溫與 RoR 曲線">
       {ticks.map((t) => (
         <g key={t}>
           <line x1={x(t)} x2={x(t)} y1={pad.t} y2={H - pad.b} stroke="var(--color-border, #ccc)" strokeWidth="1" />
