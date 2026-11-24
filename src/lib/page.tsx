@@ -49,20 +49,20 @@ export function useCoffeeOptions(): Opt[] {
   return data.filter((c) => !c.archivedAt).map((c) => ({ value: c.id, label: `${c.code}｜${c.nameZh}` }));
 }
 
-/** 有庫存的生豆批次；include 為修改時目前使用的生豆批次（即使已用完也列出） */
-export function useGreenLotOptions(include?: string | null): Opt[] {
+/** 有庫存的生豆批次；include 為修改時目前使用的生豆批次（即使已用完也列出）；coffeeId 只列這支豆子 */
+export function useGreenLotOptions(include?: string | null, coffeeId?: string | null): Opt[] {
   const { data } = useCol("invLots", [["kind", "GREEN"]], "createdAt");
-  return data.filter((l) => l.greenLotId && (D(l.onHand).gt(0) || l.greenLotId === include)).map((l) => ({ value: l.greenLotId, label: `${l.lotCode}｜${String(l.itemName).replace("生豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(0)}g）` }));
+  return data.filter((l) => l.greenLotId && (!coffeeId || l.coffeeId === coffeeId || l.greenLotId === include) && (D(l.onHand).gt(0) || l.greenLotId === include)).map((l) => ({ value: l.greenLotId, label: `${l.lotCode}｜${String(l.itemName).replace("生豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(0)}g）` }));
 }
 
-export function useRoastedLotOptions(): Opt[] {
+export function useRoastedLotOptions(coffeeId?: string | null): Opt[] {
   const { data } = useCol("invLots", [["kind", "ROASTED"]], "createdAt");
-  return data.filter((l) => l.status === "AVAILABLE" && D(l.onHand).gt(0)).map((l) => ({ value: l.id, label: `${l.lotCode}｜${String(l.itemName).replace("熟豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(1)}g）` }));
+  return data.filter((l) => l.status === "AVAILABLE" && D(l.onHand).gt(0) && (!coffeeId || l.coffeeId === coffeeId)).map((l) => ({ value: l.id, label: `${l.lotCode}｜${String(l.itemName).replace("熟豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(1)}g）` }));
 }
 
-export function useRoastBatchOptions(): Opt[] {
+export function useRoastBatchOptions(coffeeId?: string | null): Opt[] {
   const { data } = useCol("roastBatches", [], "roastedAt");
-  return data.map((r) => ({ value: r.id, label: `${r.batchNo}｜${r.coffeeName}（${fmtDate(r.roastedAt)}）` }));
+  return data.filter((r) => !coffeeId || r.coffeeId === coffeeId).map((r) => ({ value: r.id, label: `${r.batchNo}｜${r.coffeeName}（${fmtDate(r.roastedAt)}）` }));
 }
 
 export function useEquipmentOptions(type: string): Opt[] {

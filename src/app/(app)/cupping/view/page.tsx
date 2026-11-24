@@ -25,7 +25,7 @@ export default function CuppingDetail() {
           <>
             <PageHeader
               title={`杯測｜${x.coffeeName}`}
-              description={`${fmtDateTime(x.cuppedAt)} · 烘後第 ${x.restDays} 天 · ${t.name}`}
+              description={`${fmtDateTime(x.cuppedAt)}${x.restDays == null ? "" : ` · 烘後第 ${x.restDays} 天`} · ${t.name}`}
               back={{ href: "/cupping/", label: "杯測" }}
               actions={<><LinkButton href={`/cupping/compare/?ids=${sib.data.map((q) => q.id).join(",")}`} variant="outline">同批次比較</LinkButton><LinkButton href={`/cupping/new/?roast=${x.roastBatchId}`}>＋ 再杯測一次</LinkButton><LinkButton href={`/cupping/new/?edit=${x.id}`} variant="secondary">修改</LinkButton><ActionDialog label="刪除" variant="danger" title="刪除這筆杯測？" description={x.stockTxId !== null ? "若此杯測曾扣除熟豆庫存，將自動沖銷回庫存。刪除後無法復原（操作紀錄會保留）。" : "刪除後無法復原（操作紀錄會保留）。"} confirmLabel="確認刪除" payload={{ id: x.id }} action={opAction("cupping.delete")} redirectTo="/cupping/" /></>}
             />
@@ -46,7 +46,7 @@ export default function CuppingDetail() {
                   <KV
                     cols={4}
                     items={[
-                      ["烘焙批次", <A key="r" href={`/roasting/view/?id=${x.roastBatchId}`}>{x.batchNo}</A>],
+                      ["烘焙批次", x.roastBatchId ? <A key="r" href={`/roasting/view/?id=${x.roastBatchId}`}>{x.batchNo}</A> : `樣品（沒有烘豆紀錄）${x.sampleRoastedDate ? `・烘焙日 ${x.sampleRoastedDate}` : ""}`],
                       ["研磨度", x.grindSetting],
                       ["粉量／水量", `${fmtNum(x.doseG, 2)} g／${fmtNum(x.waterG, 1)} g`],
                       ["水溫", x.waterTempC ? `${x.waterTempC}°C` : "—"],

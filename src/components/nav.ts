@@ -1,4 +1,4 @@
-import { Bean, Flame, FlaskConical, Boxes, ShoppingBag, Tag, BarChart3, Settings } from "lucide-react";
+import { Bean, ShoppingBag, Tag, BarChart3, Settings } from "lucide-react";
 
 export type NavTab = { href: string; label: string };
 export type NavModule = { key: string; label: string; desc: string; icon: typeof Bean; tabs: NavTab[] };
@@ -11,33 +11,17 @@ export const MODULES: NavModule[] = [
   {
     key: "coffee",
     label: "咖啡豆",
-    desc: "生豆資料與採購來源",
+    desc: "以咖啡豆為主角：生豆採購、烘豆、杯測、手沖、分裝、庫存都在同一處",
     icon: Bean,
     tabs: [
-      { href: "/coffees/", label: "生豆資訊" },
-      { href: "/green/", label: "生豆來源" },
-    ],
-  },
-  { key: "roast", label: "烘豆", desc: "烘焙批次與曲線比較", icon: Flame, tabs: [{ href: "/roasting/", label: "烘豆紀錄" }] },
-  {
-    key: "taste",
-    label: "品鑑",
-    desc: "風味、杯測、手沖",
-    icon: FlaskConical,
-    tabs: [
-      { href: "/flavors/", label: "風味描述" },
+      { href: "/coffees/", label: "咖啡豆" },
+      { href: "/green/", label: "生豆採購" },
+      { href: "/roasting/", label: "烘豆" },
       { href: "/cupping/", label: "杯測" },
       { href: "/brewing/", label: "手沖" },
-    ],
-  },
-  {
-    key: "stock",
-    label: "庫存與分裝",
-    desc: "庫存、分裝、盤點、帳本",
-    icon: Boxes,
-    tabs: [
-      { href: "/inventory/", label: "庫存中心" },
-      { href: "/production/", label: "分裝生產" },
+      { href: "/production/", label: "分裝" },
+      { href: "/inventory/", label: "庫存" },
+      { href: "/flavors/", label: "風味描述" },
       { href: "/inventory/count/", label: "整批盤點" },
       { href: "/inventory/ledger/", label: "庫存帳本" },
     ],

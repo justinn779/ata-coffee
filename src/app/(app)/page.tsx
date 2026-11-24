@@ -119,8 +119,8 @@ export default function Dashboard() {
       )}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Recent title="最近烘豆" href="/roasting/" rows={roasts.data.slice(0, 5).map((x) => ({ href: `/roasting/view/?id=${x.id}`, title: x.coffeeName, sub: fmtDate(x.roastedAt), tip: `${x.batchNo}・失重 ${fmtPct(x.weightLossPercent)}・DTR ${fmtPct(x.dtrPercent)}` }))} />
-        <Recent title="最近杯測" href="/cupping/" rows={cups.data.slice(0, 5).map((x) => ({ href: `/cupping/view/?id=${x.id}`, title: x.coffeeName, sub: fmtDate(x.cuppedAt), tip: `烘後 ${x.restDays} 天・平均 ${fmtNum(x.totalScore, 2)}` }))} />
-        <Recent title="最近手沖" href="/brewing/" rows={brews.data.slice(0, 5).map((x) => ({ href: `/brewing/view/?id=${x.id}`, title: x.coffeeName, sub: fmtDate(x.brewedAt), tip: `烘後 ${x.restDays} 天・1:${fmtNum(x.ratio, 1)}・評分 ${fmtNum(x.rating, 1)}` }))} />
+        <Recent title="最近杯測" href="/cupping/" rows={cups.data.slice(0, 5).map((x) => ({ href: `/cupping/view/?id=${x.id}`, title: x.coffeeName, sub: fmtDate(x.cuppedAt), tip: `烘後 ${x.restDays ?? "—"} 天・平均 ${fmtNum(x.totalScore, 2)}` }))} />
+        <Recent title="最近手沖" href="/brewing/" rows={brews.data.slice(0, 5).map((x) => ({ href: `/brewing/view/?id=${x.id}`, title: x.coffeeName, sub: fmtDate(x.brewedAt), tip: `烘後 ${x.restDays ?? "—"} 天・1:${fmtNum(x.ratio, 1)}・評分 ${fmtNum(x.rating, 1)}` }))} />
       </div>
     </>
   );

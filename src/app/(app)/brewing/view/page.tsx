@@ -20,7 +20,7 @@ export default function BrewDetail() {
           <>
             <PageHeader
               title={`手沖｜${x.coffeeName}`}
-              description={`${fmtDateTime(x.brewedAt)} · 烘後第 ${x.restDays} 天 · ${x.batchNo}`}
+              description={`${fmtDateTime(x.brewedAt)}${x.restDays == null ? "" : ` · 烘後第 ${x.restDays} 天`} · ${x.batchNo}`}
               back={{ href: "/brewing/", label: "手沖" }}
               actions={
                 <>
@@ -46,7 +46,7 @@ export default function BrewDetail() {
                   <KV
                     cols={3}
                     items={[
-                      ["烘焙批次", <A key="r" href={`/roasting/view/?id=${x.roastBatchId}`}>{x.batchNo}</A>],
+                      ["烘焙批次", x.roastBatchId ? <A key="r" href={`/roasting/view/?id=${x.roastBatchId}`}>{x.batchNo}</A> : `樣品（沒有烘豆紀錄）${x.sampleRoastedDate ? `・烘焙日 ${x.sampleRoastedDate}` : ""}`],
                       ["配方", x.recipeLabel ?? "—"],
                       ["研磨機／刻度", `${x.grinderName ?? "—"}／${x.grindSetting ?? "—"}`],
                       ["濾杯／濾紙", `${x.dripperName ?? "—"}／${x.filterName ?? "—"}`],

@@ -1,21 +1,31 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { todayTaipei } from "@/lib/time";
 import { opAction } from "@/lib/api";
-import { useQS, useRoastedLotOptions, useVariantOptions } from "@/lib/page";
+import { useQS, useRoastedLotOptions, useVariantOptions, withNext } from "@/lib/page";
 import { EntityForm } from "@/components/entity-form";
-import { Notice, PageHeader } from "@/components/ui";
+import { LinkButton, Notice, PageHeader } from "@/components/ui";
 
 export default function NewPO() {
   const lot = useQS("lot");
+  const coffee = useQS("coffee");
+  const sp = useSearchParams();
   const variant = useQS("variant");
-  const lots = useRoastedLotOptions();
+  const lots = useRoastedLotOptions(coffee);
   const variants = useVariantOptions({ includeBundles: false });
   return (
     <>
       <PageHeader title="新增分裝單（預先分裝）" description="建立後即預留熟豆：計畫數量 × 單包重量。接單後分裝由訂單自動建立。" back={{ href: "/production/", label: "分裝生產" }} />
       {lots.length === 0 ? (
-        <Notice tone="warning">沒有可用的熟豆批次。</Notice>
+        <Notice tone="warning">
+          <span className="flex flex-wrap items-center justify-between gap-3">
+            {coffee ? "這支豆子還沒有可用的熟豆，先烘一批，完成後會回到這裡。" : "沒有可用的熟豆批次，先烘一批。"}
+            <LinkButton size="sm" href={withNext(coffee ? `/roasting/new/?coffee=${coffee}` : "/roasting/new/", `/production/new/${sp.toString() ? `?${sp.toString()}` : ""}`)}>
+              ＋ 新增烘豆
+            </LinkButton>
+          </span>
+        </Notice>
       ) : (
         <EntityForm
           key={`${lots.length}-${variants.length}`}

@@ -39,7 +39,7 @@ export default function BrewingPage() {
               cells: {
                 date: fmtDate(x.brewedAt),
                 coffee: <span>{x.coffeeName} {x.isRecommended && <Badge tone="sage">推薦</Badge>}</span>,
-                rest: `${x.restDays} 天`,
+                rest: x.restDays == null ? "—" : `${x.restDays} 天`,
                 ratio: `${fmtNum(x.doseG, 1)}g · 1:${fmtNum(x.ratio, 1)}`,
                 temp: x.waterTempC ? `${x.waterTempC}°C` : "—",
                 time: fmtSec(x.totalTimeSec),

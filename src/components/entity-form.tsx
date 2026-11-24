@@ -122,7 +122,10 @@ export function EntityForm({
         } catch {}
       toast(res.message ?? successMessage);
       const data = res.data as { id?: string; redirect?: string } | undefined;
-      const dest = data?.redirect ?? (redirectTo ? redirectTo.replace(":id", data?.id ?? "") : null);
+      // 網址帶 ?next= 時，完成後回到原處（例如從咖啡豆頁新增杯測，存完回咖啡豆頁）
+      const nx = new URLSearchParams(window.location.search).get("next");
+      const back = nx && nx.startsWith("/") && !nx.startsWith("//") ? nx : null;
+      const dest = back ?? data?.redirect ?? (redirectTo ? redirectTo.replace(":id", data?.id ?? "") : null);
       if (dest) router.push(dest);
       else {
         reset(values);

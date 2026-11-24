@@ -4,7 +4,7 @@ const SETTINGS = ["account", "roasters", "suppliers", "equipment", "templates", 
 const PAGES: Array<[string, RegExp]> = [
   ["./", /主畫面/],
   ["flavors/", /風味描述/],
-  ["coffees/", /生豆資訊/],
+  ["coffees/", /咖啡豆/],
   ["green/", /生豆來源/],
   ["roasting/", /烘豆紀錄/],
   ["roasting/compare/", /烘焙曲線比較/],
@@ -78,7 +78,7 @@ test("回上一層：子頁面回到列表，列表頁回到主畫面", async ({
   await page.goto("./");
   await page.getByRole("link", { name: "整批盤點" }).first().click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("整批盤點");
-  await page.getByRole("link", { name: "庫存中心" }).first().click();
+  await page.getByRole("navigation", { name: "咖啡豆子功能" }).getByRole("link", { name: "庫存", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("庫存中心");
   await page.getByRole("button", { name: "回上一層" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("主畫面");
@@ -90,11 +90,11 @@ test("回上一層：子頁面回到列表，列表頁回到主畫面", async ({
 
 test("主功能子分頁：列表頁可切換，明細頁不顯示", async ({ page }) => {
   await page.goto("inventory/");
-  const tabs = page.getByRole("navigation", { name: "庫存與分裝子功能" });
-  await expect(tabs.getByRole("link", { name: "庫存中心" })).toHaveAttribute("aria-current", "page");
+  const tabs = page.getByRole("navigation", { name: "咖啡豆子功能" });
+  await expect(tabs.getByRole("link", { name: "庫存", exact: true })).toHaveAttribute("aria-current", "page");
   await tabs.getByRole("link", { name: "整批盤點" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("整批盤點");
-  await expect(page.getByRole("navigation", { name: "庫存與分裝子功能" }).getByRole("link", { name: "整批盤點" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "咖啡豆子功能" }).getByRole("link", { name: "整批盤點" })).toHaveAttribute("aria-current", "page");
   await page.goto("orders/new/");
   await expect(page.getByRole("navigation", { name: "訂單與顧客子功能" })).toHaveCount(0);
 });

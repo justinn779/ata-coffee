@@ -1,21 +1,29 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { fmtDateTime, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
-import { Guard, useQS, useRoastBatchOptions } from "@/lib/page";
+import { Guard, useCoffeeOptions, useQS, useRoastBatchOptions } from "@/lib/page";
+import { SourceSwitch, sampleMode } from "@/components/bean-source";
 import { EntityForm, type FieldDef } from "@/components/entity-form";
 import { Notice, PageHeader } from "@/components/ui";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
 
-/** 新增杯測；帶 ?edit=<id> 時為修改模式（烘焙批次與評分模板不可變更） */
+/**
+ * 新增杯測；帶 ?edit=<id> 時為修改模式（烘焙批次與評分模板不可變更）。
+ * ?coffee=<id> 只列這支豆子的烘焙批次；?sample=1（或這支豆子還沒有烘豆紀錄）改為不經過烘豆紀錄，直接記在咖啡豆上。
+ */
 export default function NewCuppingPage() {
   const roast = useQS("roast");
+  const coffee = useQS("coffee");
   const editId = useQS("edit");
   const tidQS = useQS("template");
-  const roasts = useRoastBatchOptions();
+  const sp = useSearchParams();
+  const roasts = useRoastBatchOptions(coffee);
+  const coffees = useCoffeeOptions();
   const templates = useCol("cuppingTemplates", [], "name", false);
   const cur = useDocument("cuppingSessions", editId);
   // 舊資料未記錄 stockTxId 時，以備註找回當初的扣庫存交易
@@ -29,10 +37,14 @@ export default function NewCuppingPage() {
         const tpl = list.find((t) => t.id === tid) ?? (x ? undefined : list[0]);
         if (!tpl) return <Notice tone="warning">{x ? "此杯測使用的評分模板已不存在，無法修改。" : "請先於系統設定建立杯測評分模板。"}</Notice>;
         const attrs = tpl.attributes as Array<{ key: string; label: string }>;
+        const sample = x ? !x.roastBatchId : sampleMode(sp, roast, roasts.length);
         const fields: FieldDef[] = [
           x
             ? { name: "roastBatchId", label: "", type: "hidden" }
-            : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
+            : sample
+              ? { name: "coffeeId", label: "咖啡豆", type: "select", required: true, options: coffees, section: "a", wide: true }
+              : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
+          ...(sample ? [{ name: "roastedDate", label: "烘焙日期（選填）", type: "date" as const, section: "a", hint: "填了才會計算烘後天數" }] : []),
           { name: "templateId", label: "", type: "hidden" },
           { name: "cuppedAt", label: "杯測時間", type: "datetime", required: true, section: "a", hint: "烘後天數將自動計算" },
           { name: "evaluator", label: "評分者", section: "a" },
@@ -45,11 +57,12 @@ export default function NewCuppingPage() {
           { name: "defects", label: "瑕疵", section: "c", wide: true },
           { name: "description", label: "文字描述", type: "textarea", section: "c", wide: true },
           { name: "consumedG", label: "熟豆耗用量", type: "number", unit: "g", section: "c" },
-          { name: "deductStock", label: "同步扣除熟豆庫存（杯測耗用）", type: "checkbox", section: "c", hint: x ? "修改耗用量或取消勾選時，會自動沖銷原扣庫存再重新扣除" : undefined },
+          ...(sample ? [] : [{ name: "deductStock", label: "同步扣除熟豆庫存（杯測耗用）", type: "checkbox" as const, section: "c", hint: x ? "修改耗用量或取消勾選時，會自動沖銷原扣庫存再重新扣除" : undefined }]),
         ];
         const defaults = x
           ? {
               roastBatchId: x.roastBatchId,
+              roastedDate: s(x.sampleRoastedDate),
               templateId: tpl.id,
               cuppedAt: toTaipeiLocalInput(new Date(x.cuppedAt as string)),
               evaluator: s(x.evaluator),
@@ -64,27 +77,28 @@ export default function NewCuppingPage() {
               consumedG: s(x.consumedG),
               deductStock: x.stockTxId === undefined ? legacy.data.length > 0 : !!x.stockTxId,
             }
-          : { roastBatchId: roast ?? "", templateId: tpl.id, cuppedAt: nowTaipeiLocal(), doseG: "8.25", waterG: "150", waterTempC: "93", deductStock: true };
+          : { roastBatchId: roast ?? "", coffeeId: coffee ?? "", templateId: tpl.id, cuppedAt: nowTaipeiLocal(), doseG: "8.25", waterG: "150", waterTempC: "93", deductStock: true };
         return (
           <>
             <PageHeader
               title={x ? "修改杯測" : "新增杯測"}
-              description={x ? `${x.batchNo} · ${x.coffeeName} · 原杯測時間 ${fmtDateTime(x.cuppedAt)}（烘焙批次與評分模板不可變更）` : `評分系統：${tpl.name}（${tpl.scaleMin}–${tpl.scaleMax} 分，自訂模板，非 SCA 官方標準）`}
+              description={x ? `${x.roastBatchId ? x.batchNo : "樣品（沒有烘豆紀錄）"} · ${x.coffeeName} · 原杯測時間 ${fmtDateTime(x.cuppedAt)}（烘焙批次與評分模板不可變更）` : `評分系統：${tpl.name}（${tpl.scaleMin}–${tpl.scaleMax} 分，自訂模板，非 SCA 官方標準）`}
               back={x ? { href: `/cupping/view/?id=${x.id}`, label: "杯測紀錄" } : { href: "/cupping/", label: "杯測" }}
             />
+            {!x && <SourceSwitch sample={sample} />}
             {!x && list.length > 1 && (
               <p className="mb-4 text-sm text-muted">
                 切換模板：
                 {list.map((t) => (
-                  <Link key={t.id} href={`/cupping/new/?template=${t.id}${roast ? `&roast=${roast}` : ""}`} className="ml-2 text-primary underline">
+                  <Link key={t.id} href={`/cupping/new/?${new URLSearchParams({ ...Object.fromEntries(sp), template: t.id })}`} className="ml-2 text-primary underline">
                     {t.name}
                   </Link>
                 ))}
               </p>
             )}
             <EntityForm
-              key={x ? `edit-${x.id}-${legacy.data.length}` : `${tpl.id}-${roasts.length}`}
-              draftKey={x ? undefined : `cupping-new-${tpl.id}`}
+              key={x ? `edit-${x.id}-${legacy.data.length}` : `${tpl.id}-${roasts.length}-${coffees.length}-${sample}`}
+              draftKey={x ? undefined : `cupping-new-${tpl.id}${sample ? "-sample" : ""}`}
               submitLabel={x ? "儲存修改" : "儲存杯測"}
               defaultValues={defaults}
               sections={[

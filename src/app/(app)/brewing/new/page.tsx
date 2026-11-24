@@ -1,21 +1,26 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { fmtSec, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument, type Row } from "@/lib/data";
-import { Guard, useEquipmentOptions, useQS, useRoastBatchOptions } from "@/lib/page";
+import { Guard, useCoffeeOptions, useEquipmentOptions, useQS, useRoastBatchOptions } from "@/lib/page";
+import { SourceSwitch, sampleMode } from "@/components/bean-source";
 import { EntityForm } from "@/components/entity-form";
 import { PageHeader } from "@/components/ui";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
 
-/** 新增手沖；?copy= 複製參數；?edit=<id> 修改（烘焙批次不可變更） */
+/** 新增手沖；?copy= 複製參數；?edit=<id> 修改（烘焙批次不可變更）；?coffee= 只列這支豆子；?sample=1 不經過烘豆紀錄 */
 export default function NewBrewPage() {
   const roast = useQS("roast");
+  const coffee = useQS("coffee");
+  const sp = useSearchParams();
   const editId = useQS("edit");
   const copy = useQS("copy") ?? editId;
   const rid = useQS("recipe");
-  const roasts = useRoastBatchOptions();
+  const roasts = useRoastBatchOptions(coffee);
+  const coffees = useCoffeeOptions();
   const grinders = useEquipmentOptions("GRINDER");
   const drippers = useEquipmentOptions("DRIPPER");
   const filters = useEquipmentOptions("FILTER");
@@ -28,9 +33,12 @@ export default function NewBrewPage() {
       {() => {
         const edit = editId ? src.data : null;
         const base: Row | null = src.data ?? recipe.data;
+        const sample = edit ? !edit.roastBatchId : copy && src.data ? !src.data.roastBatchId && !roast : sampleMode(sp, roast, roasts.length);
         const plan = src.data ? (src.data.pourSteps as Row[]) : ((recipe.data?.pourPlan as Row[]) ?? []);
         const defaults = {
           roastBatchId: roast ?? s(src.data?.roastBatchId),
+          coffeeId: coffee ?? s(src.data?.coffeeId),
+          roastedDate: s(src.data?.sampleRoastedDate),
           recipeId: s(recipe.data?.id ?? src.data?.recipeId),
           brewedAt: edit ? toTaipeiLocalInput(new Date(edit.brewedAt as string)) : nowTaipeiLocal(),
           grinderId: s(base?.grinderId),
@@ -55,9 +63,10 @@ export default function NewBrewPage() {
         return (
           <>
             <PageHeader title={edit ? "修改手沖紀錄" : src.data ? "複製手沖參數" : recipe.data ? `使用配方：${recipe.data.name} v${recipe.data.version}` : "新增手沖紀錄"} description="粉水比、烘後天數、累積水量自動計算；分段注水合計需等於總水量" back={edit ? { href: `/brewing/view/?id=${edit.id}`, label: "沖煮紀錄" } : { href: "/brewing/", label: "手沖" }} />
+            {!edit && <SourceSwitch sample={sample} />}
             <EntityForm
-              key={`${roasts.length}-${grinders.length}-${drippers.length}-${recipes.data.length}-${legacy.data.length}`}
-              draftKey={src.data || recipe.data ? undefined : "brew-new"}
+              key={`${sample}-${coffees.length}-${roasts.length}-${grinders.length}-${drippers.length}-${recipes.data.length}-${legacy.data.length}`}
+              draftKey={src.data || recipe.data ? undefined : sample ? "brew-new-sample" : "brew-new"}
               submitLabel={edit ? "儲存修改" : "儲存沖煮紀錄"}
               defaultValues={defaults}
               sections={[
@@ -67,7 +76,12 @@ export default function NewBrewPage() {
                 { key: "d", title: "結果與評價" },
               ]}
               fields={[
-                edit ? { name: "roastBatchId", label: "", type: "hidden" } : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
+                edit
+                  ? { name: "roastBatchId", label: "", type: "hidden" }
+                  : sample
+                    ? { name: "coffeeId", label: "咖啡豆", type: "select", required: true, options: coffees, section: "a", wide: true }
+                    : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
+                ...(sample ? [{ name: "roastedDate", label: "烘焙日期（選填）", type: "date" as const, section: "a", hint: "填了才會計算烘後天數" }] : []),
                 { name: "brewedAt", label: "沖煮時間", type: "datetime", required: true, section: "a" },
                 { name: "recipeId", label: "使用配方", type: "select", options: recipes.data.map((r) => ({ value: r.id, label: `${r.name} v${r.version}` })), section: "a" },
                 { name: "grinderId", label: "研磨機", type: "select", options: grinders, section: "a" },
@@ -104,7 +118,7 @@ export default function NewBrewPage() {
                 { name: "flavorNotes", label: "風味表現", type: "textarea", section: "d", wide: true },
                 { name: "note", label: "備註", type: "textarea", section: "d", wide: true },
                 { name: "isRecommended", label: "標記為推薦沖煮", type: "checkbox", section: "d" },
-                { name: "deductStock", label: "扣除熟豆庫存（試喝耗用＝粉量）", type: "checkbox", section: "d", hint: edit ? "修改粉量或取消勾選時，會自動沖銷原扣庫存再重新扣除" : undefined },
+                ...(sample ? [] : [{ name: "deductStock", label: "扣除熟豆庫存（試喝耗用＝粉量）", type: "checkbox" as const, section: "d", hint: edit ? "修改粉量或取消勾選時，會自動沖銷原扣庫存再重新扣除" : undefined }]),
               ]}
               action={edit ? opAction("brew.update", { id: edit.id }, (d) => `/brewing/view/?id=${d.id}`) : opAction("brew.create", undefined, (d) => `/brewing/view/?id=${d.id}`)}
             />

@@ -198,6 +198,8 @@ export const DELETABLE: Record<string, DeletableDef> = {
       { col: C.greenLots, field: "coffeeId", label: "生豆批次" },
       { col: C.roastBatches, field: "coffeeId", label: "烘焙批次" },
       { col: C.products, field: "coffeeId", label: "商品" },
+      { col: C.cuppings, field: "coffeeId", label: "杯測紀錄" },
+      { col: C.brews, field: "coffeeId", label: "手沖紀錄" },
     ],
     cleanup: async (tx, d) => {
       for (const k of ["green", "roasted"]) if (await tx.get(C.items, `coffee-${k}-${d.id}`)) await tx.delete(C.items, `coffee-${k}-${d.id}`);

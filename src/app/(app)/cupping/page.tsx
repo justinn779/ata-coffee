@@ -14,7 +14,7 @@ export default function CuppingPage() {
   for (const x of s.data) {
     if (x.totalScore == null) continue;
     const e = byCoffee.get(x.coffeeId) ?? { name: x.coffeeName as string, pts: [] as Array<[number, number]>, trend: [] as Array<[string, number]> };
-    e.pts.push([x.restDays, Number(x.totalScore)]);
+    if (x.restDays != null) e.pts.push([x.restDays, Number(x.totalScore)]);
     e.trend.push([x.cuppedAt, Number(x.totalScore)]);
     byCoffee.set(x.coffeeId, e);
   }
@@ -57,7 +57,7 @@ export default function CuppingPage() {
                 search: [x.batchNo, x.coffeeName, x.description, x.evaluator, ...(x.tags ?? [])].join(" "),
                 filters: { coffee: x.coffeeId },
                 sort: { date: x.cuppedAt, rest: x.restDays, score: x.totalScore == null ? null : Number(x.totalScore) },
-                cells: { date: fmtDate(x.cuppedAt), coffee: x.coffeeName, batch: x.batchNo, rest: `${x.restDays} 天`, score: fmtNum(x.totalScore, 2), tags: (x.tags ?? []).join("、") || "—", who: x.evaluator ?? "—" },
+                cells: { date: fmtDate(x.cuppedAt), coffee: x.coffeeName, batch: x.batchNo, rest: x.restDays == null ? "—" : `${x.restDays} 天`, score: fmtNum(x.totalScore, 2), tags: (x.tags ?? []).join("、") || "—", who: x.evaluator ?? "—" },
               }))}
             />
           </>

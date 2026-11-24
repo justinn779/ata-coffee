@@ -13,7 +13,7 @@ export default function CoffeesPage() {
   const stock = (coffeeId: string, kind: string) => lots.data.filter((l) => l.coffeeId === coffeeId && l.kind === kind && l.status === "AVAILABLE").reduce((s, l) => s.add(l.onHand), D(0));
   return (
     <>
-      <PageHeader title="生豆資訊" description="咖啡豆主檔；同一咖啡豆可對應多個生豆採購批次" actions={<LinkButton href="/coffees/new/">＋ 新增咖啡豆</LinkButton>} />
+      <PageHeader title="咖啡豆" description="點一支豆子，生豆採購、烘豆、杯測、手沖、分裝、庫存都在同一頁" actions={<LinkButton href="/coffees/new/">＋ 新增咖啡豆</LinkButton>} />
       <Guard loading={coffees.loading} error={coffees.error}>
         {() =>
           coffees.data.length === 0 ? (

@@ -14,9 +14,13 @@ export function parentPath(path: string) {
  * 回上一層（不是瀏覽器的上一頁）：
  * - 主功能的列表頁（例如 杯測、庫存中心、整批盤點）→ 主畫面
  * - 新增、明細、編輯等子頁面 → 頁面指定的上一層，未指定時為所屬列表
+ * - 網址帶 ?next= 時 → 回到 next（例如從咖啡豆頁進來的表單）
  */
 export function upperLevel(path: string, search: string, parent?: string) {
-  const detail = !isListPage(path) || new URLSearchParams(search).has("id");
+  const q = new URLSearchParams(search);
+  const next = q.get("next");
+  if (next && next.startsWith("/") && !next.startsWith("//")) return next; // 從咖啡豆頁等處進來，回到原處
+  const detail = !isListPage(path) || q.has("id");
   if (!detail) return "/";
   return parent ?? parentPath(path);
 }

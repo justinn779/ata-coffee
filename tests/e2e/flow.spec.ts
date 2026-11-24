@@ -233,3 +233,35 @@ test("平板烘豆即時紀錄：每 30 秒記錄 → 下豆 → 過帳並存成
   await expect(page).toHaveURL(/\/roasting\/$/, { timeout: 60_000 });
   await expect(page.getByText(title.split("｜")[0])).toHaveCount(0);
 });
+
+test("咖啡豆頁：各步驟集中一頁；不經烘豆直接記杯測 → 修改 → 刪除，都回到咖啡豆頁", async ({ page }) => {
+  await page.goto("coffees/");
+  await page.getByText("瓜地馬拉 安提瓜").first().click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("瓜地馬拉 安提瓜");
+  const flow = page.getByRole("navigation", { name: "咖啡豆流程" });
+  for (const s of ["生豆採購", "烘豆", "杯測", "手沖", "分裝", "庫存"]) await expect(flow.getByRole("link", { name: new RegExp(s) })).toBeVisible();
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/coffee-hub.png`, fullPage: true });
+
+  await flow.getByRole("link", { name: /杯測/ }).click();
+  await expect(page).toHaveURL(/step=cup/);
+  await page.getByRole("link", { name: "＋ 杯測" }).click();
+  await expect(page.getByRole("heading", { name: "新增杯測" })).toBeVisible();
+  await page.getByRole("link", { name: "沒有烘豆紀錄" }).click();
+  await expect(page.getByLabel("咖啡豆")).toHaveValue(/.+/);
+  await page.getByLabel("烘焙日期（選填）").fill("2026-11-01");
+  await page.getByLabel("文字描述").fill("供應商樣品");
+  await page.getByRole("button", { name: "儲存杯測" }).click();
+
+  await expect(page).toHaveURL(/coffees\/view\/.*step=cup/, { timeout: 60_000 });
+  const row = page.getByRole("row", { name: /樣品/ });
+  await expect(row).toBeVisible();
+  await row.getByRole("link", { name: "修改" }).click();
+  await expect(page.getByRole("heading", { name: "修改杯測" })).toBeVisible();
+  await page.getByLabel("文字描述").fill("供應商樣品（複測）");
+  await page.getByRole("button", { name: "儲存修改" }).click();
+  await expect(page).toHaveURL(/coffees\/view\/.*step=cup/, { timeout: 60_000 });
+
+  await page.getByRole("row", { name: /樣品/ }).getByRole("button", { name: "刪除" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "確認刪除" }).click();
+  await expect(page.getByRole("row", { name: /樣品/ })).toHaveCount(0);
+});

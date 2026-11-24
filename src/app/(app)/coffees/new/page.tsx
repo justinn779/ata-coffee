@@ -6,7 +6,7 @@ import { CoffeeForm } from "../coffee-form";
 export default function NewCoffeePage() {
   return (
     <>
-      <PageHeader title="新增咖啡豆" back={{ href: "/coffees/", label: "生豆資訊" }} />
+      <PageHeader title="新增咖啡豆" back={{ href: "/coffees/", label: "咖啡豆" }} />
       <CoffeeForm />
     </>
   );

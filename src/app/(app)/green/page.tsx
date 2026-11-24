@@ -13,7 +13,7 @@ export default function GreenPage() {
   const remain = (id: string) => lots.data.find((l) => l.id === id)?.onHand;
   return (
     <>
-      <PageHeader title="生豆來源" description="每個採購批次固定其入庫成本，並透過庫存帳本追蹤每一筆領料" back={{ href: "/coffees/", label: "生豆資訊" }} actions={<LinkButton href="/green/new/">＋ 新增生豆採購</LinkButton>} />
+      <PageHeader title="生豆來源" description="每個採購批次固定其入庫成本，並透過庫存帳本追蹤每一筆領料" back={{ href: "/coffees/", label: "咖啡豆" }} actions={<LinkButton href="/green/new/">＋ 新增生豆採購</LinkButton>} />
       <Guard loading={g.loading} error={g.error}>
         {() => (
           <DataTable

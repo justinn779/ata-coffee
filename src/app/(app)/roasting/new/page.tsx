@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { fmtSec, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
@@ -14,18 +15,20 @@ import { clearLive, liveToRoastForm, loadLive } from "../live-draft";
 const s = (v: unknown) => (v == null ? "" : String(v).replace(/^(-?\d+)\.(\d*?)0+$/, (_, a: string, b: string) => (b ? `${a}.${b}` : a)));
 const mm = (v: number | null | undefined) => (v == null ? "" : fmtSec(v));
 
-/** 新增烘焙批次；?copy=<id> 複製設定，?edit=<id> 修改已過帳的批次，?live=1 過帳平板即時紀錄 */
+/** 新增烘焙批次；?copy=<id> 複製設定，?edit=<id> 修改已過帳的批次，?live=1 過帳平板即時紀錄，?coffee=<id> 只列這支豆子的生豆 */
 export default function NewRoastPage() {
   const editId = useQS("edit");
   const copyQS = useQS("copy");
   const copy = editId ?? copyQS;
   const green = useQS("green");
+  const coffee = useQS("coffee");
+  const sp = useSearchParams();
   const roasters = useCol("roasters", [], "name", false);
   const src = useDocument("roastBatches", copy);
-  const greens = useGreenLotOptions(editId ? (src.data?.greenLotId as string | undefined) : null);
+  const greens = useGreenLotOptions(editId ? (src.data?.greenLotId as string | undefined) : null, editId ? null : coffee);
   const costs = useCol(copy ? "costEntries" : null, [["roastBatchId", copy]]);
   const fromLive = useQS("live") === "1";
-  const here = fromLive ? "/roasting/new/?live=1" : editId ? `/roasting/new/?edit=${editId}` : copy ? `/roasting/new/?copy=${copy}` : "/roasting/new/";
+  const here = `/roasting/new/${sp.toString() ? `?${sp.toString()}` : ""}`;
   const [live] = useState(() => {
     if (!fromLive || typeof window === "undefined") return null;
     const d = loadLive();
@@ -89,8 +92,8 @@ export default function NewRoastPage() {
             {greens.length === 0 ? (
               <Notice tone="warning">
                 <span className="flex flex-wrap items-center justify-between gap-3">
-                  {live ? "還沒有生豆批次可以扣庫存。平板紀錄已保存，新增完會回到這裡。" : "還沒有生豆批次，請先新增生豆採購。"}
-                  <LinkButton size="sm" href={withNext("/green/new/", here)}>
+                  {live ? "還沒有生豆批次可以扣庫存。平板紀錄已保存，新增完會回到這裡。" : coffee ? "這支豆子還沒有生豆庫存，先新增一筆生豆採購，完成後會回到這裡繼續烘豆。" : "還沒有生豆批次，請先新增生豆採購。"}
+                  <LinkButton size="sm" href={withNext(coffee ? `/green/new/?coffee=${coffee}` : "/green/new/", here)}>
                     ＋ 新增生豆採購
                   </LinkButton>
                 </span>

@@ -47,10 +47,10 @@ export default function FlavorsPage() {
         {() => (
           <div className="grid gap-6">
             {coffees.data.filter((c) => !c.archivedAt).length === 0 ? (
-              <EmptyState title="尚未建立咖啡豆" description="建立生豆資訊後，這裡會整理每支豆子的風味" action={<LinkButton href="/coffees/new/">新增咖啡豆</LinkButton>} />
+              <EmptyState title="尚未建立咖啡豆" description="建立咖啡豆後，這裡會整理每支豆子的風味" action={<LinkButton href="/coffees/new/">新增咖啡豆</LinkButton>} />
             ) : (
               <Card>
-                <CardHeader title="各支咖啡豆風味" description="原始風味請在「生豆資訊」編輯；杯測、手沖的風味標籤在各紀錄填寫" />
+                <CardHeader title="各支咖啡豆風味" description="原始風味請在「咖啡豆」頁編輯；杯測、手沖的風味標籤在各紀錄填寫" />
                 <SimpleTable
                   head={["咖啡豆", "原始風味敘述", "杯測風味", "手沖風味"]}
                   rows={coffees.data

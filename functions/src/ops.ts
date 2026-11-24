@@ -44,9 +44,10 @@ interface Op<S extends z.ZodTypeAny> {
 const num = (min: number, max: number) => z.number().min(min).max(max).nullable().optional();
 const op = <S extends z.ZodTypeAny>(schema: S, run: (input: z.infer<S>, ctx: OpCtx) => Promise<unknown>): Op<S> => ({ schema, run });
 const id = z.object({ id: docId("資料") });
-const cuppingSchema = z.object({ roastBatchId: docId("烘焙批次"), templateId: docId("評分模板"), cuppedAt: isoDateTime("杯測時間"), grindSetting: optStr(100), doseG: optDec("粉量", { min: 0 }), waterG: optDec("水量", { min: 0 }), waterTempC: optDec("水溫", { min: 0 }), scores: z.record(z.string(), optDec("分數", { min: 0 })).default({}), tags: optStr(500), defects: optStr(), description: optStr(), evaluator: optStr(100), consumedG: optDec("耗用量", { min: 0 }), deductStock: bool() });
+const beanSrc = { roastBatchId: optDocId(), coffeeId: optDocId(), roastedDate: optIsoDate() };
+const cuppingSchema = z.object({ ...beanSrc, templateId: docId("評分模板"), cuppedAt: isoDateTime("杯測時間"), grindSetting: optStr(100), doseG: optDec("粉量", { min: 0 }), waterG: optDec("水量", { min: 0 }), waterTempC: optDec("水溫", { min: 0 }), scores: z.record(z.string(), optDec("分數", { min: 0 })).default({}), tags: optStr(500), defects: optStr(), description: optStr(), evaluator: optStr(100), consumedG: optDec("耗用量", { min: 0 }), deductStock: bool() });
 const brewSchema = z.object({
-      roastBatchId: docId("烘焙批次"),
+      ...beanSrc,
       recipeId: optDocId(),
       brewedAt: isoDateTime("沖煮時間"),
       grinderId: optDocId(),
@@ -270,13 +271,13 @@ export const OPS = {
     cuppingSchema,
     async (i, ctx) => ({ id: (await tx(ctx, (t) => createCupping(t, i, ctx.actor))).id }),
   ),
-  "cupping.update": op(cuppingSchema.omit({ roastBatchId: true }).extend({ id: docId("杯測紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateCupping(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新杯測紀錄" }))),
+  "cupping.update": op(cuppingSchema.omit({ roastBatchId: true, coffeeId: true }).extend({ id: docId("杯測紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateCupping(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新杯測紀錄" }))),
   "cupping.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteCupping(t, id, ctx.actor)).then(() => ({ message: "已刪除杯測紀錄" }))),
   "brew.create": op(
     brewSchema,
     async (i, ctx) => ({ id: (await tx(ctx, (t) => createBrew(t, i, ctx.actor))).id }),
   ),
-  "brew.update": op(brewSchema.omit({ roastBatchId: true }).extend({ id: docId("沖煮紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateBrew(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新沖煮紀錄" }))),
+  "brew.update": op(brewSchema.omit({ roastBatchId: true, coffeeId: true }).extend({ id: docId("沖煮紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateBrew(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新沖煮紀錄" }))),
   "brew.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteBrew(t, id, ctx.actor)).then(() => ({ message: "已刪除沖煮紀錄" }))),
   "brew.toggleRecommended": op(id, ({ id }, ctx) =>
     tx(ctx, async (t) => {
