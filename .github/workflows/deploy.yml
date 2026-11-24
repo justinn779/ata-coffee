@@ -42,16 +42,12 @@ jobs:
         env:
           E2E_CHANNEL: chromium
 
-  deploy:
+  # 建置與上傳網頁、正式上線分成兩個工作：同一工作內上傳完立刻部署，
+  # deploy-pages 偶爾會找不到剛上傳的 github-pages 檔案（actions/deploy-pages#451）
+  build:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -72,5 +68,16 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
