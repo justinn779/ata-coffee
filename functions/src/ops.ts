@@ -8,6 +8,7 @@ import { D } from "../../src/lib/decimal";
 import { DomainError } from "../../src/lib/errors";
 import { bool, boolStr, docId, enumList, isoDate, isoDateTime, optDec, optDocId, optEmail, optInt, optIsoDate, optMmSs, optStr, reqDec, reqInt, reqStr } from "../../src/lib/zod";
 import { runTx, nowIso } from "./tx";
+import { withSoft } from "./soft";
 import { C, type Actor } from "./types";
 import { audit, DEFAULT_SETTINGS } from "./domain/core";
 import { MANUAL_TX_TYPES, manualAdjust, reverseTransaction, reconcile } from "./domain/inventory";
@@ -44,6 +45,9 @@ interface Op<S extends z.ZodTypeAny> {
 const num = (min: number, max: number) => z.number().min(min).max(max).nullable().optional();
 const op = <S extends z.ZodTypeAny>(schema: S, run: (input: z.infer<S>, ctx: OpCtx) => Promise<unknown>): Op<S> => ({ schema, run });
 const id = z.object({ id: docId("資料") });
+/** 修改時的來源：沒傳就沿用原本的（undefined），空字串代表清除 */
+const keepId = () => z.preprocess((v) => (v === "" ? null : v), z.string().max(200).nullable().optional());
+const srcChange = { roastBatchId: keepId(), coffeeId: keepId() };
 const beanSrc = { roastBatchId: optDocId(), coffeeId: optDocId(), roastedDate: optIsoDate() };
 const cuppingSchema = z.object({ ...beanSrc, templateId: docId("評分模板"), cuppedAt: isoDateTime("杯測時間"), grindSetting: optStr(100), doseG: optDec("粉量", { min: 0 }), waterG: optDec("水量", { min: 0 }), waterTempC: optDec("水溫", { min: 0 }), scores: z.record(z.string(), optDec("分數", { min: 0 })).default({}), tags: optStr(500), defects: optStr(), description: optStr(), evaluator: optStr(100), consumedG: optDec("耗用量", { min: 0 }), deductStock: bool() });
 const brewSchema = z.object({
@@ -124,7 +128,8 @@ const greenFields = {
 
 /** 烘焙批次表單欄位（新增與修改共用） */
 const roastFields = {
-      greenLotId: docId("生豆批次"),
+      greenLotId: optDocId(),
+      coffeeId: optDocId(),
       roasterId: docId("烘豆機"),
       roastedAt: isoDateTime("烘焙日期時間"),
       greenWeightG: reqDec("投入生豆重量", { positive: true }),
@@ -226,7 +231,7 @@ export const OPS = {
       return { id, message: "已更新烘焙批次" };
     }),
   ),
-  "roast.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteRoastBatch(t, id, ctx.actor)).then(() => ({ message: "已刪除烘焙批次，生豆已退回庫存" }))),
+  "roast.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteRoastBatch(t, id, ctx.actor)).then(() => ({ message: "已刪除烘焙批次" }))),
   "roast.updateNotes": op(z.object({ id: docId("烘焙批次"), roastLevel: optStr(50), targetProfile: optStr(), result: optStr(), qualityRating: optInt("品質評價", 1, 10), note: optStr() }), ({ id, ...d }, ctx) =>
     tx(ctx, async (t) => {
       await t.update(C.roastBatches, id, { ...d, updatedAt: nowIso() });
@@ -271,13 +276,13 @@ export const OPS = {
     cuppingSchema,
     async (i, ctx) => ({ id: (await tx(ctx, (t) => createCupping(t, i, ctx.actor))).id }),
   ),
-  "cupping.update": op(cuppingSchema.omit({ roastBatchId: true, coffeeId: true }).extend({ id: docId("杯測紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateCupping(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新杯測紀錄" }))),
+  "cupping.update": op(cuppingSchema.extend({ ...srcChange, id: docId("杯測紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateCupping(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新杯測紀錄" }))),
   "cupping.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteCupping(t, id, ctx.actor)).then(() => ({ message: "已刪除杯測紀錄" }))),
   "brew.create": op(
     brewSchema,
     async (i, ctx) => ({ id: (await tx(ctx, (t) => createBrew(t, i, ctx.actor))).id }),
   ),
-  "brew.update": op(brewSchema.omit({ roastBatchId: true, coffeeId: true }).extend({ id: docId("沖煮紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateBrew(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新沖煮紀錄" }))),
+  "brew.update": op(brewSchema.extend({ ...srcChange, id: docId("沖煮紀錄") }), ({ id, ...i }, ctx) => tx(ctx, (t) => updateBrew(t, id, i, ctx.actor)).then(() => ({ id, message: "已更新沖煮紀錄" }))),
   "brew.delete": op(id, ({ id }, ctx) => tx(ctx, (t) => deleteBrew(t, id, ctx.actor)).then(() => ({ message: "已刪除沖煮紀錄" }))),
   "brew.toggleRecommended": op(id, ({ id }, ctx) =>
     tx(ctx, async (t) => {
@@ -680,6 +685,7 @@ function parseCurveFile(buf: Buffer, fileName: string, mapping: ColumnMapping | 
 export async function runOp(name: string, raw: unknown, ctx: OpCtx) {
   const def = (OPS as unknown as Record<string, Op<z.ZodTypeAny>>)[name];
   if (!def) throw new DomainError(`未知的操作 ${name}`, "NOT_FOUND", 404);
+  const force = !!raw && typeof raw === "object" && (raw as Record<string, unknown>).force === true;
   const parsed = def.schema.safeParse(raw ?? {});
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -688,8 +694,10 @@ export async function runOp(name: string, raw: unknown, ctx: OpCtx) {
     Object.assign(e, { fieldErrors });
     throw e;
   }
-  const result = await def.run(parsed.data, ctx);
+  const { result, warnings } = await withSoft(force, () => def.run(parsed.data, ctx));
   // 業務操作完成後的即時通知（盡力而為，失敗不影響操作結果）
   await notifyAfterOp(ctx, name, parsed.data as Record<string, unknown>, result);
-  return result;
+  if (!warnings.length) return result;
+  if (result && typeof result === "object" && !Array.isArray(result)) return { ...(result as object), warnings };
+  return result == null ? { warnings } : result;
 }

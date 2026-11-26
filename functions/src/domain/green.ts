@@ -1,6 +1,7 @@
 import { D, toDb, type Num } from "../../../src/lib/decimal";
 import { DomainError } from "../../../src/lib/errors";
 import { nowIso, type Tx } from "../tx";
+import { confirmOr, warn } from "../soft";
 import { C, type Actor, type InvLot } from "../types";
 import { audit, nextNumber } from "./core";
 import { createLot, ensureCoffeeItem, post } from "./inventory";
@@ -109,10 +110,12 @@ export async function updateGreenPurchase(tx: Tx, greenLotId: string, input: Rec
   const cost = greenCostPerG({ ...input, shippingCost: shipping, otherCost: other });
   const roasts = await tx.query(C.roastBatches, [["greenLotId", "==", g.id]]);
   const coffee = await tx.must(C.coffees, input.coffeeId, "咖啡豆");
-  if (input.coffeeId !== g.coffeeId && roasts.length) throw new DomainError("這批生豆已經烘焙過，不能改成其他咖啡豆");
+  if (input.coffeeId !== g.coffeeId && roasts.length) warn(`這批生豆已有 ${roasts.length} 筆烘焙紀錄，那些烘焙批次仍記在原本的咖啡豆「${g.coffeeName}」；需要的話請到烘焙紀錄改選`);
   const supplier = input.supplierId ? await tx.must(C.suppliers, input.supplierId, "供應商") : null;
   const lot = await tx.must<InvLot>(C.lots, g.invLotId as string, "生豆庫存批次");
   const lotCode = input.lotCode?.trim() || (g.lotCode as string);
+  const used = D(g.receivedWeightG as string).sub(lot.onHand);
+  if (D(input.receivedWeightG).lt(used)) warn(`入庫量 ${input.receivedWeightG}g 少於已用掉的 ${used}g，生豆庫存會變成負數`);
   if (lotCode !== g.lotCode && (await tx.query(C.greenLots, [["lotCode", "==", lotCode]])).length) throw new DomainError(`批次編號 ${lotCode} 已存在`);
   const diff = D(input.receivedWeightG).sub(g.receivedWeightG as string);
   if (!diff.isZero()) await post(tx, { lotId: lot.id, type: "RECEIPT", quantity: diff, refType: "GreenBeanLot", refId: g.id, note: `修改採購 ${g.purchaseNo}：入庫量 ${g.receivedWeightG}g → ${input.receivedWeightG}g`, actor, occurredAt: input.receivedAt });
@@ -150,16 +153,23 @@ export async function updateGreenPurchase(tx: Tx, greenLotId: string, input: Rec
   return { recosted };
 }
 
-/** 刪除生豆採購：已烘焙或已有其他庫存異動（盤點、報廢等）時不可刪除 */
+/**
+ * 刪除生豆採購：已烘焙時先提醒，確認後只刪這筆採購；烘焙紀錄保留原本的生豆批號，標示「生豆採購已刪除」。
+ * 剩餘的生豆庫存歸零、庫存批次作廢（帳本保留）。
+ */
 export async function deleteGreenPurchase(tx: Tx, greenLotId: string, actor: Actor) {
   const g = await tx.must(C.greenLots, greenLotId, "生豆批次");
   const roasts = await tx.query(C.roastBatches, [["greenLotId", "==", g.id]]);
-  if (roasts.length) throw new DomainError(`這批生豆已有 ${roasts.length} 筆烘焙紀錄，請先刪除那些烘焙批次`);
-  const lot = await tx.must<InvLot>(C.lots, g.invLotId as string, "生豆庫存批次");
-  const txs = await tx.query(C.txs, [["lotId", "==", lot.id]]);
-  if (txs.some((t) => t.type !== "RECEIPT" && !(t.refType === "RoastBatch"))) throw new DomainError("這批生豆已有盤點、報廢等庫存異動，不能刪除（可用庫存調整處理）");
-  if (D(lot.onHand).gt(0)) await post(tx, { lotId: lot.id, type: "RECEIPT", quantity: D(lot.onHand).neg(), refType: "GreenBeanLot", refId: g.id, note: `刪除採購 ${g.purchaseNo}`, actor });
-  await tx.update(C.lots, lot.id, { status: "SCRAPPED", note: `採購 ${g.purchaseNo} 已刪除`, updatedAt: nowIso() });
+  const lot = await tx.get<InvLot>(C.lots, g.invLotId as string);
+  const txs = lot ? await tx.query(C.txs, [["lotId", "==", lot.id]]) : [];
+  const others = txs.filter((t) => t.type !== "RECEIPT" && !(t.refType === "RoastBatch"));
+  const notes = [roasts.length ? `${roasts.length} 筆烘焙紀錄（會保留，標示生豆採購已刪除）` : "", others.length ? `${others.length} 筆盤點、報廢等庫存異動（帳本保留）` : ""].filter(Boolean);
+  if (notes.length) confirmOr(`這批生豆 ${g.lotCode} 還有 ${notes.join("、")}。確定只刪除這筆採購嗎？`);
+  for (const rb of roasts) await tx.update(C.roastBatches, rb.id, { greenLotId: null, greenLotDeleted: true, updatedAt: nowIso() });
+  if (lot) {
+    if (!D(lot.onHand).isZero()) await post(tx, { lotId: lot.id, type: "RECEIPT", quantity: D(lot.onHand).neg(), refType: "GreenBeanLot", refId: g.id, note: `刪除採購 ${g.purchaseNo}`, actor });
+    await tx.update(C.lots, lot.id, { status: "SCRAPPED", note: `採購 ${g.purchaseNo} 已刪除`, updatedAt: nowIso() });
+  }
   const siblings = g.purchaseId ? await tx.query(C.greenLots, [["purchaseId", "==", g.purchaseId]]) : [];
   if (g.purchaseId && siblings.length <= 1 && (await tx.get(C.greenPurchases, g.purchaseId as string))) await tx.delete(C.greenPurchases, g.purchaseId as string);
   await tx.delete(C.greenLots, g.id);

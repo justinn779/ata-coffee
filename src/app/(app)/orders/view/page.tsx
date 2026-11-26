@@ -54,8 +54,8 @@ export default function OrderDetail() {
                   {["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus) && x.fulfillmentStatus !== "CANCELLED" && (
                     <ActionDialog label="確認匯款" title={`確認收到 ${fmtMoney(x.total)}`} description="付款確認不會異動庫存；重複確認不會重複記錄。" payload={{ orderId: x.id }} fields={[{ name: "method", label: "付款方式", type: "select", options: Object.entries(PAYMENT_METHOD).map(([value, label]) => ({ value, label })) }, { name: "reference", label: "匯款參考（末五碼等）" }, { name: "note", label: "備註" }]} action={opAction("order.confirmPayment")} />
                   )}
-                  {x.fulfillmentStatus === "READY_TO_SHIP" && (
-                    <ActionDialog label="標記出貨" title="出貨" description={x.paymentStatus !== "PAID" ? "⚠ 訂單尚未確認付款，依系統設定將無法出貨。" : "將扣除已保留的成品庫存（出貨扣帳）。"} payload={{ orderId: x.id }} fields={[{ name: "method", label: "配送方式", defaultValue: x.shippingMethod ?? "" }, { name: "carrier", label: "物流商" }, { name: "trackingNo", label: "追蹤號碼" }, { name: "shippingCost", label: "實際物流成本（TWD）", type: "number" }, { name: "note", label: "出貨備註" }]} action={opAction("order.ship")} />
+                  {preShip && (
+                    <ActionDialog label="標記出貨" title="出貨" description={x.fulfillmentStatus !== "READY_TO_SHIP" ? "⚠ 還有商品沒備妥，出貨時只會扣已保留的部分，送出前會再提醒一次。" : x.paymentStatus !== "PAID" ? "⚠ 訂單尚未確認付款，送出前會再提醒一次。" : "將扣除已保留的成品庫存（出貨扣帳）。"} payload={{ orderId: x.id }} fields={[{ name: "method", label: "配送方式", defaultValue: x.shippingMethod ?? "" }, { name: "carrier", label: "物流商" }, { name: "trackingNo", label: "追蹤號碼" }, { name: "shippingCost", label: "實際物流成本（TWD）", type: "number" }, { name: "note", label: "出貨備註" }]} action={opAction("order.ship")} />
                   )}
                   {x.fulfillmentStatus === "SHIPPED" && <ActionDialog label="標記完成" variant="outline" title="標記訂單完成？" payload={{ orderId: x.id }} action={opAction("order.complete")} />}
                   {returnable.length > 0 && (
@@ -69,23 +69,23 @@ export default function OrderDetail() {
                       action={async (v) => callOp("order.return", { orderId: x.id, reason: v.reason, items: returnable.map((a) => ({ allocationId: a.id, quantity: String(v[`q_${a.id}`] ?? "0") })).filter((i) => Number(i.quantity) > 0) })}
                     />
                   )}
-                  {["PAID", "PARTIALLY_REFUNDED"].includes(x.paymentStatus) && !preShip && <ActionDialog label="記錄退款" variant="ghost" title="記錄退款" payload={{ orderId: x.id }} fields={[{ name: "amount", label: "退款金額", type: "number", required: true }, { name: "reference", label: "參考資訊" }, { name: "note", label: "備註" }]} action={opAction("order.refund")} />}
+                  {["PAID", "PARTIALLY_REFUNDED"].includes(x.paymentStatus) && <ActionDialog label="記錄退款" variant="ghost" title="記錄退款" payload={{ orderId: x.id }} fields={[{ name: "amount", label: "退款金額", type: "number", required: true }, { name: "reference", label: "參考資訊" }, { name: "note", label: "備註" }]} action={opAction("order.refund")} />}
                   {x.fulfillmentStatus !== "CANCELLED" && (
                     <LinkButton href={`/print/orders/?ids=${x.id}`} variant="outline">
                       列印出貨單
                     </LinkButton>
                   )}
-                  {preShip && ["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus) && (
+                  {(preShip || x.fulfillmentStatus === "CANCELLED") && (
                     <LinkButton href={`/orders/new/?edit=${x.id}`} variant="secondary">
                       修改訂單
                     </LinkButton>
                   )}
-                  {!(preShip && ["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus)) && (
+                  {!(preShip || x.fulfillmentStatus === "CANCELLED") && (
                     <ActionDialog
                       label="修改資訊"
                       variant="secondary"
                       title="修改訂單資訊"
-                      description="已收款或已出貨的訂單，只能修改顧客、收件與出貨單號等資訊；金額與品項不變。"
+                      description="已出貨的訂單在這裡修改顧客、收件與出貨單號等資訊；品項與數量請用退貨處理。"
                       payload={{ orderId: x.id }}
                       fields={[
                         { name: "customerName", label: "顧客名稱", required: true, defaultValue: x.customerName ?? "" },
@@ -99,8 +99,8 @@ export default function OrderDetail() {
                       action={opAction("order.updateInfo")}
                     />
                   )}
-                  {preShip && <ActionDialog label="取消訂單" variant="danger" title="取消訂單？" description="將釋放所有保留量、取消未完成的接單後分裝單；歷史紀錄保留。" payload={{ orderId: x.id }} fields={[{ name: "reason", label: "取消原因" }, ...(x.paymentStatus === "PAID" ? [{ name: "refundAmount", label: "同時記錄退款金額", type: "number" as const, defaultValue: x.total }] : [])]} action={opAction("order.cancel")} />}
-                  {(preShip || x.fulfillmentStatus === "CANCELLED") && x.paymentStatus !== "PAID" && <DeleteButton inline={false} what="訂單" name={x.orderNo} id={x.id} op="order.delete" redirectTo="/orders/" description="保留的成品會釋放回庫存，未完成的接單後分裝單會一起刪除。已出貨、已收款（未退款）或有退貨的訂單不能刪除。" />}
+                  {x.fulfillmentStatus !== "CANCELLED" && <ActionDialog label="取消訂單" variant="danger" title="取消訂單？" description={preShip ? "將釋放所有保留量、取消未完成的接單後分裝單；歷史紀錄保留。" : "這筆訂單已出貨，取消不會把商品退回庫存（要退回請用「辦理退貨」）。"} payload={{ orderId: x.id }} fields={[{ name: "reason", label: "取消原因" }, ...(x.paymentStatus === "PAID" ? [{ name: "refundAmount", label: "同時記錄退款金額", type: "number" as const, defaultValue: x.total }] : [])]} action={opAction("order.cancel")} />}
+                  <DeleteButton inline={false} what="訂單" name={x.orderNo} id={x.id} op="order.delete" redirectTo="/orders/" description="保留的成品會釋放回庫存，未完成的接單後分裝單會一起刪除。已出貨、已收款或有退貨時，會先提醒你確認。" />
                 </>
               }
             />

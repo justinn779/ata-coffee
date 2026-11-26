@@ -24,8 +24,9 @@ export default function NewOrderPage() {
     <Guard loading={!!editId && (cur.loading || curItems.loading)} error={cur.error ?? curItems.error} missing={!!editId && !cur.data}>
       {() => {
         const x = cur.data;
-        const editable = x && ["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP"].includes(x.fulfillmentStatus) && ["UNPAID", "PENDING_CONFIRMATION"].includes(x.paymentStatus);
-        if (x && !editable) return <Notice tone="warning">此訂單已出貨、已取消或已確認付款，無法修改。已付款訂單請先取消（含退款）後重新建立。</Notice>;
+        // 已出貨的品項請用退貨處理；已付款、已取消仍可修改（儲存時會先提醒）
+        const editable = x && ["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP", "CANCELLED"].includes(x.fulfillmentStatus);
+        if (x && !editable) return <Notice tone="warning">此訂單已出貨，品項與數量請用「辦理退貨」處理；顧客與收件資料可在訂單頁按「修改資訊」。</Notice>;
         const defaults = x
           ? {
               customerId: s(x.customerId),
@@ -48,9 +49,9 @@ export default function NewOrderPage() {
             />
             <div className="mb-4">
               {x ? (
-                <Notice>儲存時會先釋放原本保留的庫存、取消未完成的接單後分裝單，再依新內容重新保留（FIFO）。原有品項沿用下單時單價，新增品項使用目前售價。庫存不足時修改不會生效，原訂單維持不變。</Notice>
+                <Notice>儲存時會先釋放原本保留的庫存、取消未完成的接單後分裝單，再依新內容重新保留（FIFO）。原有品項沿用下單時單價，新增品項使用目前售價。庫存不足或已收款時，會先提醒你確認。</Notice>
               ) : (
-                <Notice>建立時立即保留現貨成品（依效期 FIFO 分配批次）；「可接單後分裝」的品項 若現貨不足，會自動建立分裝單並預留單一熟豆批次。庫存不足時訂單不會成立。</Notice>
+                <Notice>建立時立即保留現貨成品（依效期 FIFO 分配批次）；「可接單後分裝」的品項 若現貨不足，會自動建立分裝單並預留單一熟豆批次。庫存不足時會先提醒，確認後照樣建立，缺的件數補貨後再按「修改」重新保留。</Notice>
               )}
             </div>
             <EntityForm

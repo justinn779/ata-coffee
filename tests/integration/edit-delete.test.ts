@@ -78,13 +78,13 @@ describe("出貨前修改訂單", () => {
     await expectReconciled();
   });
 
-  it("已確認付款或已出貨的訂單不可修改", async () => {
+  it("已確認付款或已出貨的訂單：修改前先提醒", async () => {
     const { f } = await stock(4);
     const o = await order(f.v100.id, 1);
     await op("order.confirmPayment", { orderId: o.id });
     await expect(op("order.update", { orderId: o.id, customerName: "測試顧客", items: items([f.v100.id, 2]) })).rejects.toThrow(/已確認付款/);
     await op("order.ship", { orderId: o.id });
-    await expect(op("order.update", { orderId: o.id, customerName: "測試顧客", items: items([f.v100.id, 2]) })).rejects.toThrow(/尚未出貨/);
+    await expect(op("order.update", { orderId: o.id, customerName: "測試顧客", items: items([f.v100.id, 2]) })).rejects.toThrow(/已出貨/);
     await expectReconciled();
   });
 });

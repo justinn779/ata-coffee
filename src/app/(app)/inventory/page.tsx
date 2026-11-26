@@ -40,7 +40,8 @@ export default function InventoryPage() {
     return { i, onHand: sum(av, (l) => D(l.onHand)), reserved: sum(av, (l) => D(l.reserved)), available, quarantine: sum(ls.filter((l) => l.status === "QUARANTINE"), (l) => D(l.onHand)), value: sum(ls, (l) => D(l.onHand).mul(l.unitCost)), low: th.gt(0) && available.lt(th) };
   });
   const shown = lowOnly ? summary.filter((x) => x.low) : summary;
-  const visibleLots = lots.data.filter((l) => D(l.onHand).gt(0) || D(l.reserved).gt(0));
+  const visibleLots = lots.data.filter((l) => !D(l.onHand).isZero() || D(l.reserved).gt(0));
+  const negativeLots = visibleLots.filter((l) => D(l.onHand).isNegative());
   return (
     <>
       <PageHeader
@@ -76,6 +77,11 @@ export default function InventoryPage() {
         </div>
       )}
       <Tabs active={kind} tabs={KINDS.map((x) => ({ key: x, label: LABEL[x], href: `/inventory/?kind=${x}` }))} />
+      {negativeLots.length > 0 && (
+        <div className="mb-4">
+          <Notice tone="warning">提醒：{negativeLots.map((l) => l.lotCode).join("、")} 庫存是負數（之前庫存不足時確認照樣扣除），請補登入庫或用「整批盤點」修正。</Notice>
+        </div>
+      )}
       <Guard loading={items.loading || lots.loading} error={items.error ?? lots.error}>
         {() => (
           <>
@@ -114,7 +120,7 @@ export default function InventoryPage() {
                 search: [l.lotCode, l.itemName, l.note].join(" "),
                 filters: { status: l.status },
                 sort: { lot: l.lotCode, onHand: Number(l.onHand), date: l.producedAt ?? l.createdAt, exp: l.expiryDate ?? null },
-                cells: { lot: l.lotCode, item: l.itemName, status: <StatusBadge map={LOT_STATUS} value={l.status} />, onHand: uf(l.onHand, l.unit), reserved: uf(l.reserved, l.unit), cost: `NT$ ${fmtNum(l.unitCost, 4)}`, date: fmtDate(l.producedAt ?? l.createdAt), exp: fmtDbDate(l.expiryDate) },
+                cells: { lot: l.lotCode, item: l.itemName, status: <StatusBadge map={LOT_STATUS} value={l.status} />, onHand: D(l.onHand).isNegative() ? <span className="font-medium text-danger" title="庫存為負：之前庫存不足時確認照樣扣除，請補登入庫或盤點修正">{uf(l.onHand, l.unit)} ⚠</span> : uf(l.onHand, l.unit), reserved: uf(l.reserved, l.unit), cost: `NT$ ${fmtNum(l.unitCost, 4)}`, date: fmtDate(l.producedAt ?? l.createdAt), exp: fmtDbDate(l.expiryDate) },
               }))}
             />
           </>

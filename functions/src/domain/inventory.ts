@@ -9,8 +9,9 @@
  */
 import type { Firestore } from "firebase-admin/firestore";
 import { D, toDb, type Num, Decimal } from "../../../src/lib/decimal";
-import { DomainError, InsufficientStockError, InvalidStateError } from "../../../src/lib/errors";
+import { DomainError, InvalidStateError } from "../../../src/lib/errors";
 import { nowIso, newId, type Tx } from "../tx";
+import { confirmOr } from "../soft";
 import { C, type Actor, type InventoryKind, type InvItem, type InvLot, type InvTx, type LotStatus, type Reservation, type TxType } from "../types";
 
 export const TX_LABEL: Record<TxType, string> = {
@@ -133,8 +134,9 @@ export async function post(tx: Tx, input: PostInput): Promise<InvTx> {
   const newOnHand = D(lot.onHand).add(qty);
   const newReserved = D(lot.reserved).sub(release);
   if (newReserved.isNegative()) throw new InvalidStateError("保留量計算錯誤：解除量大於現有保留量");
-  if (newOnHand.isNegative()) throw new InsufficientStockError(`${lot.itemName}［${lot.lotCode}］庫存不足：在庫 ${fmtQ(lot.onHand)}，欲扣除 ${fmtQ(qty.neg())}`);
-  if (newOnHand.lessThan(newReserved)) throw new InsufficientStockError(`${lot.itemName}［${lot.lotCode}］可用量不足：在庫 ${fmtQ(lot.onHand)}，其中 ${fmtQ(lot.reserved)} 已保留`);
+  // 庫存不足不擋住：提醒確認後照樣記錄，庫存可以變成負數，之後再補登採購或盤點修正
+  if (qty.isNegative() && newOnHand.isNegative()) confirmOr(`${lot.itemName}［${lot.lotCode}］庫存不足：在庫 ${fmtQ(lot.onHand)}，要扣除 ${fmtQ(qty.neg())}，記錄後庫存會變成 ${fmtQ(newOnHand)}`);
+  else if (qty.isNegative() && newOnHand.lessThan(newReserved)) confirmOr(`${lot.itemName}［${lot.lotCode}］可用量不足：在庫 ${fmtQ(lot.onHand)}，其中 ${fmtQ(lot.reserved)} 已保留給訂單或分裝`);
   const now = nowIso();
   await tx.update(C.lots, lot.id, { onHand: toDb(newOnHand, 3), reserved: toDb(newReserved, 3), updatedAt: now });
   return tx.create(C.txs, {
@@ -177,9 +179,9 @@ export async function reserve(tx: Tx, input: ReserveInput): Promise<Reservation>
   const qty = D(input.quantity);
   if (qty.lte(0)) throw new DomainError("保留量必須大於 0");
   const lot = await tx.must<InvLot>(C.lots, input.lotId, "庫存批次");
-  if (lot.status !== "AVAILABLE") throw new InvalidStateError(`批次 ${lot.lotCode} 非可用狀態，無法保留`);
+  if (lot.status !== "AVAILABLE") confirmOr(`批次 ${lot.lotCode} 目前不是可用狀態（${lot.status}），仍要保留嗎？`);
   const available = D(lot.onHand).sub(lot.reserved);
-  if (available.lessThan(qty)) throw new InsufficientStockError(`${lot.itemName}［${lot.lotCode}］可用量 ${fmtQ(available)}，不足保留 ${fmtQ(qty)}`);
+  if (available.lessThan(qty)) confirmOr(`${lot.itemName}［${lot.lotCode}］可用量 ${fmtQ(available)}，不足保留 ${fmtQ(qty)}，記錄後可用量會變成負數`);
   await tx.update(C.lots, lot.id, { reserved: toDb(D(lot.reserved).add(qty), 3), updatedAt: nowIso() });
   return tx.create(C.reservations, {
     lotId: lot.id,
@@ -225,11 +227,11 @@ export async function consumeReservation(
 export const availableOf = (lot: Pick<InvLot, "onHand" | "reserved">) => D(lot.onHand).sub(lot.reserved);
 
 /** 品項可用批次（FIFO：效期 → 生產時間 → 建立時間）；查詢即鎖定這些批次 */
-export async function availableLots(tx: Tx, itemId: string) {
+export async function availableLots(tx: Tx, itemId: string, includeEmpty = false) {
   const lots = await tx.query<InvLot>(C.lots, [["itemId", "==", itemId], ["status", "==", "AVAILABLE"]]);
   const k = (v?: string | null) => v ?? "9999";
   lots.sort((a, b) => k(a.expiryDate).localeCompare(k(b.expiryDate)) || k(a.producedAt).localeCompare(k(b.producedAt)) || a.createdAt.localeCompare(b.createdAt));
-  return lots.filter((l) => availableOf(l).gt(0));
+  return includeEmpty ? lots : lots.filter((l) => availableOf(l).gt(0));
 }
 
 export function planFifo(lots: InvLot[], qty: Num, what: string): Array<{ lot: InvLot; qty: Decimal }> {
@@ -237,6 +239,7 @@ export function planFifo(lots: InvLot[], qty: Num, what: string): Array<{ lot: I
   const plan: Array<{ lot: InvLot; qty: Decimal }> = [];
   for (const lot of lots) {
     if (remaining.lte(0)) break;
+    if (availableOf(lot).lte(0)) continue;
     const take = Decimal.min(availableOf(lot), remaining);
     if (take.gt(0)) {
       plan.push({ lot, qty: take });
@@ -244,8 +247,16 @@ export function planFifo(lots: InvLot[], qty: Num, what: string): Array<{ lot: I
     }
   }
   if (remaining.gt(0)) {
-    const total = lots.reduce((s, l) => s.add(availableOf(l)), D(0));
-    throw new InsufficientStockError(`${what} 可用量 ${fmtQ(total)}，不足 ${fmtQ(qty)}`);
+    const total = lots.reduce((s, l) => s.add(Decimal.max(availableOf(l), 0)), D(0));
+    const last = lots[lots.length - 1];
+    if (!last) {
+      confirmOr(`${what} 沒有任何庫存批次，這次不扣 ${fmtQ(qty)}（之後可補登入庫）`);
+      return plan;
+    }
+    confirmOr(`${what} 可用量 ${fmtQ(total)}，不足 ${fmtQ(qty)}，不足的部分會從 ${last.lotCode} 扣成負數`);
+    const p = plan.find((x) => x.lot.id === last.id);
+    if (p) p.qty = p.qty.add(remaining);
+    else plan.push({ lot: last, qty: remaining });
   }
   return plan;
 }
@@ -262,7 +273,7 @@ export async function reverseTransaction(tx: Tx, txId: string, actor: Actor, not
   const orig = await tx.must<InvTx>(C.txs, txId, "庫存交易");
   if (orig.reversedById) throw new InvalidStateError("此交易已被沖銷");
   if (orig.type === "REVERSAL") throw new InvalidStateError("沖銷交易不可再沖銷");
-  if (!([...MANUAL_TX_TYPES, "RECEIPT"] as string[]).includes(orig.type)) throw new InvalidStateError("業務流程產生的交易請由原流程（取消、退貨等）處理");
+  if (!([...MANUAL_TX_TYPES, "RECEIPT"] as string[]).includes(orig.type)) confirmOr("這筆是烘豆、分裝、出貨等流程自動產生的異動，建議回原紀錄修改。仍要直接沖銷嗎？（原紀錄不會跟著改）");
   const rev = await post(tx, { lotId: orig.lotId, type: "REVERSAL", quantity: D(orig.quantity).neg(), refType: "REVERSAL", refId: orig.id, reversesId: orig.id, note, actor });
   // 帳本只新增不修改；以 uniq 佔位標記「已沖銷」，並在原交易外的索引集合記錄關聯
   await tx.claimUnique("reversal", orig.id, "此交易已被沖銷");
@@ -284,7 +295,8 @@ export async function reconcile(db: Firestore) {
   const active = new Map<string, Decimal>();
   for (const r of resv) if (r.status === "ACTIVE") active.set(r.lotId, (active.get(r.lotId) ?? D(0)).add(r.quantity));
   return lots
-    .filter((l) => !D(l.onHand).eq(ledger.get(l.id) ?? 0) || !D(l.reserved).eq(active.get(l.id) ?? 0) || D(l.onHand).isNegative() || D(l.reserved).gt(l.onHand))
+    // 只檢查與帳本、保留紀錄是否一致；庫存為負（確認後允許）不算對帳異常，由庫存頁另外提醒
+    .filter((l) => !D(l.onHand).eq(ledger.get(l.id) ?? 0) || !D(l.reserved).eq(active.get(l.id) ?? 0))
     .map((l) => ({ lotCode: l.lotCode, onHand: l.onHand, ledger: (ledger.get(l.id) ?? D(0)).toString(), reserved: l.reserved, activeResv: (active.get(l.id) ?? D(0)).toString() }));
 }
 

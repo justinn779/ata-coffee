@@ -18,7 +18,7 @@ export default function CustomerDetail() {
     <Guard loading={c.loading} error={c.error} missing={!c.data}>
       {() => (
         <>
-          <PageHeader title={c.data!.name} description={c.data!.code} back={{ href: "/customers/", label: "顧客" }} actions={<><LinkButton href={`/orders/new/?customer=${id}`}>＋ 為此顧客建立訂單</LinkButton><DeleteButton inline={false} what="顧客" name={c.data!.name} col="customers" id={c.data!.id} redirectTo="/customers/" description="有訂單的顧客不能刪除。修改顧客名稱、電話、Email 時，這位顧客的訂單會一起更新。" /></>} />
+          <PageHeader title={c.data!.name} description={c.data!.code} back={{ href: "/customers/", label: "顧客" }} actions={<><LinkButton href={`/orders/new/?customer=${id}`}>＋ 為此顧客建立訂單</LinkButton><DeleteButton inline={false} what="顧客" name={c.data!.name} col="customers" id={c.data!.id} redirectTo="/customers/" description="修改顧客名稱、電話、Email 時，這位顧客的訂單會一起更新。有其他紀錄用到時，會先提醒你確認。" /></>} />
           <div className="grid gap-6">
             <CustomerForm initial={c.data!} />
             <Card>

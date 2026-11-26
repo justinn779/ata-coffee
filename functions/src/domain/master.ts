@@ -1,4 +1,5 @@
 /** 主檔與設定類寫入（皆在交易中執行並寫稽核紀錄） */
+import { confirmOr, warn } from "../soft";
 import { createHash, randomBytes } from "node:crypto";
 import { D, toDb } from "../../../src/lib/decimal";
 import { DomainError } from "../../../src/lib/errors";
@@ -38,7 +39,7 @@ export async function saveVariant(tx: Tx, input: Data & { id?: string | null; pr
   if (!data.isBundle && data.stockPolicy === "MADE_TO_ORDER" && !data.fillWeightG) throw new DomainError("接單後分裝需設定填充重量");
   if (id) {
     const prev = await tx.must(C.variants, id, "品項");
-    if (prev.isBundle !== data.isBundle && (await tx.query(C.orderItems, [["variantId", "==", id]], { limit: 1 })).length) throw new DomainError("已有訂單使用此品項，不可切換套組／單品類型");
+    if (prev.isBundle !== data.isBundle && (await tx.query(C.orderItems, [["variantId", "==", id]], { limit: 1 })).length) confirmOr("已有訂單使用這個品項，切換套組／單品後，舊訂單仍照當時的內容出貨。仍要切換嗎？");
   }
   const bundleComponents = [];
   if (data.isBundle) {
@@ -63,12 +64,12 @@ export async function saveVariant(tx: Tx, input: Data & { id?: string | null; pr
 /** 商品變更時同步 SKU 的反正規化欄位 */
 export async function saveProduct(tx: Tx, input: Data & { id?: string | null }, actor: Actor) {
   const { id, ...data } = input;
-  if (data.saleStartDate && data.saleEndDate && String(data.saleEndDate) < String(data.saleStartDate)) throw new DomainError("販售結束日期不可早於開始日期");
+  if (data.saleStartDate && data.saleEndDate && String(data.saleEndDate) < String(data.saleStartDate)) warn("販售結束日期早於開始日期，請確認");
   const variants = id ? await tx.query(C.variants, [["productId", "==", id]]) : [];
   if (id) {
     const prev = await tx.must(C.products, id, "商品");
     if (prev.coffeeId && prev.coffeeId !== data.coffeeId && (await tx.query(C.productionOrders, [["targetVariantId", "in", variants.map((v) => v.id).concat(["-"])]], { limit: 1 })).length) {
-      throw new DomainError("此商品已有分裝紀錄，不可更換對應咖啡豆（請建立新商品）");
+      warn("這個商品已有分裝紀錄，改了對應的咖啡豆後，之前分裝的成品仍是原本的豆子");
     }
   }
   const p = await upsert(tx, C.products, id, data, actor, { unique: "code", label: "商品" });
@@ -87,8 +88,8 @@ export async function receiveMaterial(tx: Tx, input: { materialId: string; quant
 
 export async function setLotStatus(tx: Tx, input: { lotId: string; status: "AVAILABLE" | "HOLD"; note: string }, actor: Actor) {
   const lot = await tx.must<InvLot>(C.lots, input.lotId, "批次");
-  if (lot.status === "QUARANTINE") throw new DomainError("待檢批次請由退貨檢查流程處理");
-  if (input.status === "HOLD" && D(lot.reserved).gt(0)) throw new DomainError("批次仍有保留量，無法改為品質保留");
+  if (lot.status === "QUARANTINE") confirmOr("這是退貨待檢批次，建議用退貨檢查流程處理。仍要直接改狀態嗎？");
+  if (input.status === "HOLD" && D(lot.reserved).gt(0)) confirmOr(`這批還有 ${lot.reserved} 已保留給訂單或分裝，改為品質保留後那些保留仍在。仍要改嗎？`);
   await tx.update(C.lots, lot.id, { status: input.status, updatedAt: nowIso() });
   audit(tx, actor, "lot.status", "InvLot", lot.id, `${lot.status} → ${input.status}：${input.note}`);
 }

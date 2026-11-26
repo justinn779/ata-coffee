@@ -8,6 +8,7 @@ import { D, money, toDb, type Num, Decimal } from "../../../src/lib/decimal";
 import { DomainError, InsufficientStockError, InvalidStateError } from "../../../src/lib/errors";
 import { addDaysYmd } from "../../../src/lib/time";
 import { newId, nowIso, type Tx } from "../tx";
+import { confirmOr, warn } from "../soft";
 import { C, type Actor, type InvLot } from "../types";
 import { audit, getSettings, nextNumber } from "./core";
 import { allocateLotToItem, refreshFulfillment, refreshItemCostSnapshot, requiredUnits, type AllocationDoc, type OrderItemDoc } from "./allocation";
@@ -108,7 +109,7 @@ async function priceLines(tx: Tx, items: CreateOrderInput["items"], keepPrices?:
   for (const [vid, m] of merged) {
     const v = await tx.must(C.variants, vid, "商品品項");
     const kept = keepPrices?.get(vid);
-    if (!kept && (v.status === "ARCHIVED" || v.productStatus === "ARCHIVED")) throw new DomainError(`${v.sku} 已封存，無法下單`);
+    if (!kept && (v.status === "ARCHIVED" || v.productStatus === "ARCHIVED")) confirmOr(`${v.sku} 已封存，仍要下單嗎？`);
     const unitPrice = D(kept ?? (v.salePrice as string));
     const gross = unitPrice.mul(m.quantity);
     if (m.discount.isNegative() || m.discount.gt(gross)) throw new DomainError(`${v.sku} 折扣金額不合理`);
@@ -153,7 +154,10 @@ async function createItems(tx: Tx, order: { id: string; orderNo: string; ordered
       if (fromStock.gt(0)) for (const p of planFifo(lots, fromStock, fg.name)) await allocateLotToItem(tx, { orderId: order.id, orderItemId: oi.id, variantId: need.variantId, sku: cv.sku as string, lot: p.lot, qty: p.qty });
       const shortfall = need.qty.sub(fromStock);
       if (shortfall.gt(0)) {
-        if (l.v.isBundle || cv.stockPolicy !== "MADE_TO_ORDER") throw new InsufficientStockError(`${cv.sku} 可售庫存 ${avail} 件，不足訂購 ${need.qty} 件（不可超賣）`);
+        if (l.v.isBundle || cv.stockPolicy !== "MADE_TO_ORDER" || !(await canMadeToOrder(tx, cv, shortfall.toNumber()))) {
+          confirmOr(`${cv.sku} 可售庫存 ${avail} 件，不足訂購 ${need.qty} 件。仍要建立嗎？缺的 ${shortfall} 件會先記著，補貨後在訂單按「修改」重新保留庫存`);
+          continue;
+        }
         await planMadeToOrder(tx, { orderId: order.id, orderItemId: oi.id, variant: cv, units: shortfall.toNumber(), actor });
         await tx.update(C.orderItems, oi.id, { fulfillmentMode: "MADE_TO_ORDER" });
       }
@@ -172,12 +176,13 @@ export type UpdateOrderInput = Omit<CreateOrderInput, "channel" | "externalRef" 
  */
 export async function updateOrder(tx: Tx, orderId: string, input: UpdateOrderInput, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
-  if (!["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP"].includes(o.fulfillmentStatus as string)) throw new InvalidStateError("只有尚未出貨的訂單可以修改");
-  if (!["UNPAID", "PENDING_CONFIRMATION"].includes(o.paymentStatus as string)) throw new InvalidStateError("訂單已確認付款，不可修改內容；請先取消（含退款）後重新建立訂單");
   if (!input.customerName?.trim()) throw new DomainError("請填寫顧客名稱");
   const oldItems = await tx.query<OrderItemDoc>(C.orderItems, [["orderId", "==", orderId]]);
   const allocs = await tx.query<AllocationDoc>(C.allocations, [["orderId", "==", orderId]]);
-  if (allocs.some((a) => a.status === "SHIPPED")) throw new InvalidStateError("訂單已有出貨紀錄，不可修改");
+  const shipped = !["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP", "CANCELLED"].includes(o.fulfillmentStatus as string) || allocs.some((a) => a.status === "SHIPPED");
+  if (shipped) return updateShippedOrderInfo(tx, o, oldItems, input, actor);
+  if (o.fulfillmentStatus === "CANCELLED") confirmOr("這筆訂單已取消，修改後會重新保留庫存並回到待出貨。仍要修改嗎？");
+  if (!["UNPAID", "PENDING_CONFIRMATION"].includes(o.paymentStatus as string)) confirmOr("訂單已確認付款，修改內容後金額可能跟已收款不同，需要自行補收或退款。仍要修改嗎？");
   const pos = (await tx.query(C.productionOrders, [["orderId", "==", orderId]])).filter((p) => p.status === "PLANNED");
 
   // 1) 釋放原保留、取消未完成的接單後分裝單、刪除原明細
@@ -210,14 +215,48 @@ export async function updateOrder(tx: Tx, orderId: string, input: UpdateOrderInp
     shippingFee: toDb(shippingFee, 2),
     total: toDb(total, 2),
     fulfillmentStatus: "PENDING",
+    cancelledAt: null,
     updatedAt: nowIso(),
   });
+  if (["PAID", "PARTIALLY_REFUNDED"].includes(o.paymentStatus as string) && !D(o.total as string).eq(total)) warn(`訂單金額 ${o.total} → ${toDb(total, 2)}，跟已收款不同，請自行補收或退款`);
   await createItems(tx, { id: orderId, orderNo: o.orderNo as string, orderedAt: o.orderedAt }, lines, actor);
   await refreshFulfillment(tx, orderId);
   const before = oldItems.map((it) => `${it.skuSnapshot}×${it.quantity}`).join("、");
   const after = lines.map((l) => `${l.v.sku}×${l.quantity}`).join("、");
   audit(tx, actor, "order.update", "SalesOrder", orderId, `修改訂單 ${o.orderNo}：${before} → ${after}；金額 ${o.total} → ${toDb(total, 2)}`);
   return tx.must(C.orders, orderId, "訂單");
+}
+
+/** 是否能接單後分裝（有設定咖啡豆與填充重量，且有單一熟豆批次足量） */
+async function canMadeToOrder(tx: Tx, v: Record<string, unknown>, units: number) {
+  if (!v.coffeeId || !v.fillWeightG) return false;
+  const roasted = await ensureCoffeeItem(tx, v.coffeeId as string, "ROASTED").catch(() => null);
+  if (!roasted) return false;
+  const need = D(v.fillWeightG as string).mul(units);
+  return (await availableLots(tx, roasted.id)).some((l) => availableOf(l).gte(need));
+}
+
+/** 已出貨訂單的修改：先提醒；品項與庫存不動，只更新顧客、收件、運費、備註 */
+async function updateShippedOrderInfo(tx: Tx, o: Record<string, unknown> & { id: string }, oldItems: OrderItemDoc[], input: UpdateOrderInput, actor: Actor) {
+  const before = new Map(oldItems.map((it) => [it.variantId, it.quantity]));
+  const sameItems = input.items.length === before.size && input.items.every((it) => before.get(it.variantId) === it.quantity);
+  confirmOr(sameItems ? "這筆訂單已出貨，修改顧客、收件、運費等資料不會影響庫存。仍要修改嗎？" : "這筆訂單已出貨，品項與數量不會變更（請改用退貨），只會更新顧客、收件、運費與備註。仍要修改嗎？");
+  const shippingFee = money(input.shippingFee ?? 0);
+  const total = D(o.total as string).sub(o.shippingFee as string).add(shippingFee);
+  await tx.update(C.orders, o.id, {
+    customerId: input.customerId ?? null,
+    customerName: input.customerName.trim(),
+    customerPhone: input.customerPhone ?? null,
+    customerEmail: input.customerEmail ?? null,
+    shippingAddress: input.shippingAddress ?? null,
+    shippingMethod: input.shippingMethod ?? null,
+    note: input.note ?? null,
+    shippingFee: toDb(shippingFee, 2),
+    total: toDb(total, 2),
+    updatedAt: nowIso(),
+  });
+  audit(tx, actor, "order.update", "SalesOrder", o.id, `修改已出貨訂單 ${o.orderNo} 的顧客／收件資料`);
+  return tx.must(C.orders, o.id, "訂單");
 }
 
 async function planMadeToOrder(tx: Tx, args: { orderId: string; orderItemId: string; variant: Record<string, unknown> & { id: string }; units: number; actor: Actor }) {
@@ -239,10 +278,10 @@ export async function markPaymentPending(tx: Tx, orderId: string, actor: Actor, 
 
 export async function confirmPayment(tx: Tx, orderId: string, input: { method?: string; amount?: Num | null; reference?: string | null; note?: string | null; paidAt?: string }, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
-  if (o.fulfillmentStatus === "CANCELLED") throw new InvalidStateError("訂單已取消，不可確認付款");
+  if (o.fulfillmentStatus === "CANCELLED") confirmOr("這筆訂單已取消，仍要確認付款嗎？");
   if (["PAID", "REFUNDED", "PARTIALLY_REFUNDED"].includes(o.paymentStatus as string)) return { order: o, alreadyPaid: true };
   const amount = D(input.amount ?? (o.total as string));
-  if (!amount.eq(o.total as string)) throw new DomainError(`付款金額 ${amount} 與訂單金額 ${o.total} 不符`);
+  if (!amount.eq(o.total as string)) confirmOr(`付款金額 ${amount} 與訂單金額 ${o.total} 不同，仍要記為已付款嗎？`);
   const paidAt = input.paidAt ?? nowIso();
   tx.set(C.payments, `pay-${orderId}`, { orderId, orderNo: o.orderNo, type: "PAYMENT", method: input.method ?? "BANK_TRANSFER", amount: toDb(amount, 2), reference: input.reference ?? null, note: input.note ?? null, occurredAt: paidAt });
   const updated = await tx.update(C.orders, orderId, { paymentStatus: "PAID", paidAt, updatedAt: nowIso() });
@@ -253,9 +292,10 @@ export async function confirmPayment(tx: Tx, orderId: string, input: { method?: 
 export async function shipOrder(tx: Tx, orderId: string, input: { method?: string | null; carrier?: string | null; trackingNo?: string | null; shippingCost?: Num | null; shippedAt?: string; note?: string | null }, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
   if (["SHIPPED", "COMPLETED"].includes(o.fulfillmentStatus as string)) throw new InvalidStateError("訂單已出貨，不可重複出貨");
-  if (o.fulfillmentStatus !== "READY_TO_SHIP") throw new InvalidStateError("訂單尚未備妥（需為「可出貨」狀態）");
+  if (o.fulfillmentStatus === "CANCELLED") confirmOr("這筆訂單已取消，仍要出貨嗎？");
+  else if (o.fulfillmentStatus !== "READY_TO_SHIP") confirmOr("訂單還有商品沒備妥（沒有保留到庫存），出貨時只會扣已保留的部分。仍要出貨嗎？");
   const settings = await getSettings(tx);
-  if (settings.order.requirePaymentBeforeShip && o.paymentStatus !== "PAID") throw new InvalidStateError("訂單尚未確認付款，不可出貨");
+  if (settings.order.requirePaymentBeforeShip && o.paymentStatus !== "PAID") confirmOr("訂單尚未確認付款，仍要出貨嗎？");
   const shippedAt = input.shippedAt ?? nowIso();
   const allocs = (await tx.query<AllocationDoc>(C.allocations, [["orderId", "==", orderId]])).filter((a) => a.status === "RESERVED");
   const groupId = newId();
@@ -278,27 +318,27 @@ export async function shipOrder(tx: Tx, orderId: string, input: { method?: strin
 
 export async function completeOrder(tx: Tx, orderId: string, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
-  if (o.fulfillmentStatus !== "SHIPPED") throw new InvalidStateError("僅已出貨的訂單可標記完成");
+  if (o.fulfillmentStatus !== "SHIPPED") confirmOr("這筆訂單還沒出貨，仍要標記完成嗎？（不會扣庫存）");
   await tx.update(C.orders, orderId, { fulfillmentStatus: "COMPLETED", completedAt: nowIso(), updatedAt: nowIso() });
   audit(tx, actor, "order.complete", "SalesOrder", orderId, "訂單完成");
 }
 
 export async function recordRefund(tx: Tx, orderId: string, input: { amount: Num; method?: string; reference?: string | null; note?: string | null }, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
-  if (!["PAID", "PARTIALLY_REFUNDED"].includes(o.paymentStatus as string)) throw new InvalidStateError("僅已付款訂單可退款");
+  if (!["PAID", "PARTIALLY_REFUNDED"].includes(o.paymentStatus as string)) confirmOr("這筆訂單還沒確認付款，仍要記錄退款嗎？");
   const amount = money(input.amount);
   if (amount.lte(0)) throw new DomainError("退款金額必須大於 0");
   const refunded = D(o.refundedTotal as string).add(amount);
-  if (refunded.gt(o.total as string)) throw new DomainError("退款總額不可超過訂單金額");
+  if (refunded.gt(o.total as string)) confirmOr(`退款總額 ${refunded} 會超過訂單金額 ${o.total}，仍要記錄嗎？`);
   tx.create(C.payments, { orderId, orderNo: o.orderNo, type: "REFUND", method: input.method ?? "BANK_TRANSFER", amount: toDb(amount, 2), reference: input.reference ?? null, note: input.note ?? null, occurredAt: nowIso() });
-  await tx.update(C.orders, orderId, { refundedTotal: toDb(refunded, 2), paymentStatus: refunded.eq(o.total as string) ? "REFUNDED" : "PARTIALLY_REFUNDED", updatedAt: nowIso() });
+  await tx.update(C.orders, orderId, { refundedTotal: toDb(refunded, 2), paymentStatus: refunded.gte(o.total as string) ? "REFUNDED" : "PARTIALLY_REFUNDED", updatedAt: nowIso() });
   audit(tx, actor, "order.refund", "SalesOrder", orderId, `退款 ${amount}`);
 }
 
 export async function cancelOrder(tx: Tx, orderId: string, input: { reason?: string | null; refundAmount?: Num | null }, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
   if (o.fulfillmentStatus === "CANCELLED") return o;
-  if (!["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP"].includes(o.fulfillmentStatus as string)) throw new InvalidStateError("已出貨訂單不可取消，請改辦理退貨");
+  if (!["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP"].includes(o.fulfillmentStatus as string)) confirmOr("這筆訂單已出貨，取消不會把商品退回庫存（要退回庫存請用「退貨」）。仍要取消嗎？");
   const allocs = (await tx.query<AllocationDoc>(C.allocations, [["orderId", "==", orderId]])).filter((a) => a.status === "RESERVED");
   const pos = (await tx.query(C.productionOrders, [["orderId", "==", orderId]])).filter((p) => p.status === "PLANNED");
   for (const a of allocs) {
@@ -314,7 +354,7 @@ export async function cancelOrder(tx: Tx, orderId: string, input: { reason?: str
 
 export async function createReturn(tx: Tx, orderId: string, input: { reason?: string | null; items: Array<{ allocationId: string; quantity: Num }> }, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
-  if (!["SHIPPED", "COMPLETED", "RETURN_PROCESSING"].includes(o.fulfillmentStatus as string)) throw new InvalidStateError("僅已出貨訂單可辦理退貨");
+  if (!["SHIPPED", "COMPLETED", "RETURN_PROCESSING"].includes(o.fulfillmentStatus as string)) confirmOr("這筆訂單目前不是已出貨狀態，仍要辦理退貨嗎？");
   if (!input.items.length) throw new DomainError("請選擇退貨品項");
   const returnNo = await nextNumber(tx, "RT");
   const groupId = newId();
@@ -326,7 +366,7 @@ export async function createReturn(tx: Tx, orderId: string, input: { reason?: st
     const a = await tx.get<AllocationDoc>(C.allocations, ri.allocationId);
     if (!a || a.orderId !== orderId || a.status !== "SHIPPED") throw new DomainError("退貨品項不屬於此訂單或尚未出貨");
     const returned = D((a.returnedQty as string) ?? 0);
-    if (returned.add(qty).gt(a.quantity)) throw new DomainError(`退貨數量超過已出貨數量（批次 ${a.lotCode}）`);
+    if (returned.add(qty).gt(a.quantity)) confirmOr(`退貨數量超過已出貨數量（批次 ${a.lotCode}），仍要記錄嗎？`);
     const orig = await tx.must<InvLot>(C.lots, a.lotId, "原批次");
     const qLot = await createLot(tx, { itemId: orig.itemId, lotCode: `${returnNo}-${orig.lotCode}`, unitCost: a.unitCost, status: "QUARANTINE", returnSourceLotId: a.lotId, producedAt: orig.producedAt ?? undefined, expiryDate: orig.expiryDate, expirySource: orig.expirySource, note: `退貨待檢（${o.orderNo}）` });
     await post(tx, { lotId: qLot.id, type: "RETURN_QUARANTINE", quantity: qty, refType: "ReturnRecord", refId: rrId, groupId, actor, note: `退貨 ${returnNo}` });
@@ -350,7 +390,7 @@ export async function inspectReturnItem(tx: Tx, returnId: string, itemId: string
   const groupId = newId();
   const ctx = { refType: "ReturnRecord", refId: rr.id, groupId, actor };
   if (disposition === "RESTOCK") {
-    if (original.status !== "AVAILABLE") throw new InvalidStateError("原成品批次非可用狀態，無法重新入庫");
+    if (original.status !== "AVAILABLE") confirmOr(`原成品批次 ${original.lotCode} 目前不是可用狀態，仍要重新入庫到這批嗎？`);
     await post(tx, { ...ctx, lotId: ri.quarantineLotId as string, type: "RETURN_RESTOCK_OUT", quantity: D(ri.quantity as string).neg(), note: note ?? "檢查合格，重新入庫" });
     await post(tx, { ...ctx, lotId: original.id, type: "RETURN_RESTOCK_IN", quantity: ri.quantity as string, note: note ?? `退貨 ${rr.returnNo} 重新入庫` });
   } else {
@@ -381,13 +421,22 @@ export async function addOrderCost(tx: Tx, orderId: string, input: { category: s
 export async function deleteOrder(tx: Tx, orderId: string, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
   const allocs = await tx.query<AllocationDoc>(C.allocations, [["orderId", "==", orderId]]);
-  if (allocs.some((a) => a.status === "SHIPPED")) throw new InvalidStateError("訂單已出貨，不能刪除（請辦理退貨）");
-  if ((await tx.query(C.returns, [["orderId", "==", orderId]])).length) throw new InvalidStateError("訂單有退貨紀錄，不能刪除");
-  if (o.paymentStatus === "PAID") throw new InvalidStateError("訂單已收款，請先取消並退款後再刪除");
-  if (o.fulfillmentStatus !== "CANCELLED") await cancelOrder(tx, orderId, { reason: "刪除訂單" }, actor);
-  for (const p of await tx.query(C.productionOrders, [["orderId", "==", orderId]])) {
-    if (p.status === "COMPLETED") throw new InvalidStateError(`接單後分裝單 ${p.orderNo} 已完成，請先處理那批成品`);
-    await tx.delete(C.productionOrders, p.id);
+  const returns = await tx.query(C.returns, [["orderId", "==", orderId]]);
+  const pos = await tx.query(C.productionOrders, [["orderId", "==", orderId]]);
+  const doneMo = pos.filter((p) => p.status === "COMPLETED");
+  const notes = [
+    allocs.some((a) => a.status === "SHIPPED") ? "已出貨（出貨扣掉的庫存不會退回）" : "",
+    returns.length ? `有 ${returns.length} 筆退貨紀錄（會保留）` : "",
+    o.paymentStatus === "PAID" ? "已收款（付款紀錄會一起刪除，請自行處理退款）" : "",
+    doneMo.length ? `接單後分裝單 ${doneMo.map((p) => p.orderNo).join("、")} 已完成（成品留在庫存）` : "",
+  ].filter(Boolean);
+  if (notes.length) confirmOr(`這筆訂單${notes.join("、")}。確定刪除嗎？`);
+  if (["PENDING", "AWAITING_PACKAGING", "READY_TO_SHIP"].includes(o.fulfillmentStatus as string)) await cancelOrder(tx, orderId, { reason: "刪除訂單" }, actor);
+  else for (const a of allocs.filter((x) => x.status === "RESERVED")) await releaseReservation(tx, a.reservationId);
+  for (const p of pos) {
+    if (p.status === "PLANNED") await cancelProductionOrder(tx, p.id, actor, { reason: "訂單刪除", fromOrder: true });
+    if (p.status === "COMPLETED") await tx.update(C.productionOrders, p.id, { orderId: null, orderItemId: null, mode: "PRE_PACK", note: [p.note, `原訂單 ${o.orderNo} 已刪除`].filter(Boolean).join("；") });
+    else await tx.delete(C.productionOrders, p.id);
   }
   for (const col of [C.orderItems, C.allocations, C.payments, C.costs]) for (const d of await tx.query(col, [["orderId", "==", orderId]])) await tx.delete(col, d.id);
   if (o.externalRef) await tx.releaseUnique("externalRef", o.externalRef as string);

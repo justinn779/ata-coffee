@@ -22,9 +22,11 @@ describe("烘焙計算", () => {
     expect(partial.dtrPercent).toBeNull();
     expect(partial.developmentPhaseSec).toBeNull();
   });
-  it("事件順序錯誤時拒絕", () => {
-    expect(() => computePhases({ dryEndSec: 300, firstCrackStartSec: 200 })).toThrow(/轉黃點/);
-    expect(() => computePhases({ firstCrackStartSec: 500, dropSec: 400 })).toThrow(/一爆/);
+  it("事件順序錯誤時不擋住，只是不計算該段", () => {
+    expect(computePhases({ dryEndSec: 300, firstCrackStartSec: 200 }).maillardPhaseSec).toBeNull();
+    const p = computePhases({ firstCrackStartSec: 500, dropSec: 400 });
+    expect(p.developmentPhaseSec).toBeNull();
+    expect(p.dtrPercent).toBeNull();
   });
   it("賞味設定：批次覆寫優先於咖啡豆預設", () => {
     const f = freshnessOf({ restStartDays: null, peakFromDays: 10, peakToDays: null, shelfLifeDays: null }, { restStartDays: 5, peakFromDays: 7, peakToDays: 30, shelfLifeDays: 180 });

@@ -474,7 +474,7 @@ function DropSummary({ d, onContinue, onSubmit }: { d: LiveDraft; onContinue: ()
           <dd className="text-lg font-medium">{dev != null && total ? `${fmtSec(dev)}（${((dev / total) * 100).toFixed(1)}%）` : "—"}</dd>
         </div>
       </dl>
-      {!d.greenLotId && <Notice tone="warning">尚未選擇生豆批次，下一步的表單裡記得選。</Notice>}
+      {!d.greenLotId && <Notice tone="warning">尚未選擇生豆批次，下一步的表單裡可以選生豆，或沒有生豆採購時直接選咖啡豆。</Notice>}
       <div className="mt-4 grid gap-2 sm:grid-cols-[2fr_1fr]">
         <button type="button" onClick={onSubmit} className="h-16 rounded-2xl bg-primary text-xl font-semibold text-primary-fg active:opacity-80">
           下一步：填出爐重量並過帳

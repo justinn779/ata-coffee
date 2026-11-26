@@ -32,13 +32,17 @@ test("手動訂單 → 確認匯款（不重複）→ 出貨 → 批次追溯", 
   await expect(page.getByText(/包裝 PK-/).first()).toBeVisible();
 });
 
-test("庫存不足時訂單不成立並顯示原因", async ({ page }) => {
+test("庫存不足時先提醒；按「先不要」不建立訂單", async ({ page }) => {
   await page.goto("orders/new/");
   await page.getByLabel("顧客名稱").fill("E2E 超量");
   await pickSku(page, "ATA002-COL-100");
   await page.locator('input[name="items.0.quantity"]').fill("999");
   await page.getByRole("button", { name: "建立訂單並保留庫存" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: /不可超賣|不足/ })).toBeVisible({ timeout: 60_000 });
+  const ask = page.getByRole("dialog", { name: "⚠ 提醒" });
+  await expect(ask).toContainText(/不足/, { timeout: 60_000 });
+  await ask.getByRole("button", { name: "先不要" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "已取消，沒有儲存" })).toBeVisible();
+  await expect(page).toHaveURL(/\/orders\/new\//);
 });
 
 test("烘焙批次：曲線 CSV 上傳 → 預覽 → 匯入 → 重複匯入被拒絕", async ({ page }) => {
@@ -76,7 +80,7 @@ test("新增咖啡豆表單：必填驗證與建立", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("E2E 測試豆");
 });
 
-test("出貨前修改訂單：改數量 → 重新保留，金額更新；付款後不可再修改", async ({ page }) => {
+test("出貨前修改訂單：改數量 → 重新保留，金額更新；付款後再改會先提醒", async ({ page }) => {
   await page.goto("orders/new/");
   await page.getByLabel("顧客名稱").fill("E2E 修改訂單");
   await pickSku(page, "DRIP-YRG-1");
@@ -95,7 +99,14 @@ test("出貨前修改訂單：改數量 → 重新保留，金額更新；付款
   await page.getByRole("button", { name: "確認匯款" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "確認" }).click();
   await expect(page.getByText("已付款").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "修改訂單" })).toHaveCount(0);
+  await page.getByRole("link", { name: "修改訂單" }).click();
+  await page.locator('input[name="items.0.quantity"]').fill("2");
+  await page.getByRole("button", { name: "儲存修改並重新保留庫存" }).click();
+  const ask = page.getByRole("dialog", { name: "⚠ 提醒" });
+  await expect(ask).toContainText("已確認付款", { timeout: 60_000 });
+  await ask.getByRole("button", { name: "仍要繼續" }).click();
+  await expect(page).toHaveURL(/\/orders\/view\/\?id=/, { timeout: 60_000 });
+  await expect(page.getByText(/跟已收款不同/).first()).toBeVisible();
 });
 
 test("杯測紀錄：修改分數與描述 → 刪除後回到列表", async ({ page }) => {

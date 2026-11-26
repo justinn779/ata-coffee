@@ -46,7 +46,7 @@ export default function RoastDetail() {
                     label="刪除"
                     variant="danger"
                     title={`刪除 ${x.batchNo}？`}
-                    description="投入的生豆會退回庫存，這批熟豆、曲線與成本會一起刪除。已有杯測、手沖，或熟豆已分裝、出貨的批次不能刪除。"
+                    description="投入的生豆會退回庫存，這批熟豆、曲線與成本會一起刪除。有其他紀錄用到時，會先提醒你確認。"
                     confirmLabel="確認刪除"
                     payload={{ id: x.id }}
                     action={opAction("roast.delete")}
@@ -75,7 +75,7 @@ export default function RoastDetail() {
                     <KV
                       cols={4}
                       items={[
-                        ["生豆批次", <A key="g" href={`/inventory/lot/?id=${greenLot.data?.invLotId}`}>{x.greenLotCode}</A>],
+                        ["生豆批次", x.greenLotId && greenLot.data ? <A key="g" href={`/inventory/lot/?id=${greenLot.data.invLotId}`}>{x.greenLotCode}</A> : x.greenLotCode ? `${x.greenLotCode}（生豆採購已刪除）` : "沒有生豆採購（生豆成本以 0 計）"],
                         ["投入生豆", fmtGrams(x.greenWeightG, 1)],
                         ["出爐熟豆", fmtGrams(x.roastedWeightG, 1)],
                         ["失重率", fmtPct(x.weightLossPercent, 2)],

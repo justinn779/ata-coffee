@@ -60,7 +60,7 @@ export default function CoffeeHub() {
   const stock = (kind: string) => lots.data.filter((l) => l.kind === kind && l.status === "AVAILABLE").reduce((s, l) => s.add(l.onHand), D(0));
   const scored = cups.data.filter((x) => x.totalScore != null);
   const avgScore = scored.length ? scored.reduce((s, x) => s.add(x.totalScore), D(0)).div(scored.length) : null;
-  const liveLots = lots.data.filter((l) => D(l.onHand).gt(0) || D(l.reserved).gt(0));
+  const liveLots = lots.data.filter((l) => !D(l.onHand).isZero() || D(l.reserved).gt(0));
 
   return (
     <Guard loading={c.loading} error={c.error} missing={!c.data}>
@@ -90,7 +90,7 @@ export default function CoffeeHub() {
               <Acts key="a">
                 <Act tone="primary" href={go(`/roasting/new/?coffee=${x.id}&green=${g.id}`)}>烘豆</Act>
                 <Act href={go(`/green/new/?edit=${g.id}`)}>修改</Act>
-                <DeleteButton what="生豆採購" name={g.lotCode} id={g.id} op="green.delete" description="這批生豆的庫存會一起移除。已經烘焙過的批次不能刪除。" />
+                <DeleteButton what="生豆採購" name={g.lotCode} id={g.id} op="green.delete" description="這批生豆的庫存會一起移除。有其他紀錄用到時，會先提醒你確認。" />
               </Acts>,
             ]),
             empty: "還沒有生豆採購。也可以不記採購，直接從杯測或手沖開始（樣品、外購熟豆）。",
@@ -116,7 +116,7 @@ export default function CoffeeHub() {
                 <Act tone="primary" href={go(`/brewing/new/?coffee=${x.id}&roast=${r.id}`)}>手沖</Act>
                 <Act tone="primary" href={go(`/production/new/?coffee=${x.id}&lot=${r.invLotId}`)}>分裝</Act>
                 <Act href={go(`/roasting/new/?edit=${r.id}`)}>修改</Act>
-                <DeleteButton what="烘焙紀錄" name={r.batchNo} id={r.id} op="roast.delete" description="投入的生豆會退回庫存，曲線與成本一起刪除。已有杯測、手沖，或熟豆已分裝、出貨的批次不能刪除。" />
+                <DeleteButton what="烘焙紀錄" name={r.batchNo} id={r.id} op="roast.delete" description="投入的生豆會退回庫存，曲線與成本一起刪除。有其他紀錄用到時，會先提醒你確認。" />
               </Acts>,
             ]),
             empty: "還沒有烘豆紀錄。",
@@ -127,7 +127,7 @@ export default function CoffeeHub() {
             head: ["日期", "豆子來源", "烘後", "平均分", "風味", ""],
             rows: [...cups.data].reverse().map((q) => [
               <A key="d" href={`/cupping/view/?id=${q.id}`}>{fmtDate(q.cuppedAt)}</A>,
-              q.roastBatchId ? q.batchNo : <Badge key="s">樣品</Badge>,
+              q.roastBatchId ? q.batchNo : q.roastDeleted ? <span key="s" title="烘焙紀錄已刪除">{q.batchNo} <Badge>已刪除</Badge></span> : <Badge key="s">樣品</Badge>,
               q.restDays == null ? "—" : `${q.restDays} 天`,
               fmtNum(q.totalScore, 2),
               <span key="t" className="line-clamp-1 max-w-56">{((q.tags as string[]) ?? []).join("、") || "—"}</span>,
@@ -144,7 +144,7 @@ export default function CoffeeHub() {
             head: ["日期", "豆子來源", "烘後", "粉量・粉水比", "評分", "風味", ""],
             rows: [...brews.data].reverse().map((b) => [
               <A key="d" href={`/brewing/view/?id=${b.id}`}>{fmtDate(b.brewedAt)}</A>,
-              b.roastBatchId ? b.batchNo : <Badge key="s">樣品</Badge>,
+              b.roastBatchId ? b.batchNo : b.roastDeleted ? <span key="s" title="烘焙紀錄已刪除">{b.batchNo} <Badge>已刪除</Badge></span> : <Badge key="s">樣品</Badge>,
               b.restDays == null ? "—" : `${b.restDays} 天`,
               `${fmtNum(b.doseG, 1)}g・1:${fmtNum(b.ratio, 1)}`,
               fmtNum(b.rating, 1),
@@ -182,7 +182,7 @@ export default function CoffeeHub() {
             rows: liveLots.map((l) => [
               KIND[l.kind] ?? l.kind,
               <A key="l" href={`/inventory/lot/?id=${l.id}`}>{l.lotCode}</A>,
-              l.unit === "G" ? fmtGrams(l.onHand) : `${fmtNum(l.onHand, 0)} 件`,
+              <span key="q" className={D(l.onHand).isNegative() ? "font-medium text-danger" : undefined} title={D(l.onHand).isNegative() ? "庫存為負，請補登入庫或盤點修正" : undefined}>{l.unit === "G" ? fmtGrams(l.onHand) : `${fmtNum(l.onHand, 0)} 件`}{D(l.onHand).isNegative() ? " ⚠" : ""}</span>,
               l.unit === "G" ? fmtGrams(l.reserved) : `${fmtNum(l.reserved, 0)} 件`,
               fmtDbDate(l.expiryDate),
               <StatusBadge key="s" map={LOT_STATUS} value={l.status} />,

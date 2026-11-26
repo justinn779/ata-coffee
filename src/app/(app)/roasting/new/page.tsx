@@ -6,7 +6,7 @@ import { fmtSec, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
 import { opts, ROAST_EVENT } from "@/lib/labels";
-import { Guard, useGreenLotOptions, useQS, withNext } from "@/lib/page";
+import { Guard, useCoffeeOptions, useGreenLotOptions, useQS, withNext } from "@/lib/page";
 import { EntityForm } from "@/components/entity-form";
 import { LinkButton, Notice, PageHeader } from "@/components/ui";
 import { clearLive, liveToRoastForm, loadLive } from "../live-draft";
@@ -26,6 +26,7 @@ export default function NewRoastPage() {
   const roasters = useCol("roasters", [], "name", false);
   const src = useDocument("roastBatches", copy);
   const greens = useGreenLotOptions(editId ? (src.data?.greenLotId as string | undefined) : null, editId ? null : coffee);
+  const coffees = useCoffeeOptions();
   const costs = useCol(copy ? "costEntries" : null, [["roastBatchId", copy]]);
   const fromLive = useQS("live") === "1";
   const here = `/roasting/new/${sp.toString() ? `?${sp.toString()}` : ""}`;
@@ -42,6 +43,7 @@ export default function NewRoastPage() {
         const cost = (cat: string) => costs.data.find((c) => c.category === cat);
         const defaults = {
           greenLotId: green ?? s(b?.greenLotId),
+          coffeeId: coffee ?? s(b?.coffeeId),
           roasterId: s(b?.roasterId ?? roasters.data[0]?.id),
           roastedAt: edit ? toTaipeiLocalInput(new Date(b.roastedAt as string)) : nowTaipeiLocal(),
           greenWeightG: s(b?.greenWeightG),
@@ -78,7 +80,7 @@ export default function NewRoastPage() {
             {edit && (
               <div className="mb-4">
                 <Notice>
-                  <span title="改生豆批次、重量或成本時，會自動補扣或退回生豆、調整熟豆庫存與成本；杯測、手沖的烘後天數與 QR 履歷也會一起更新。熟豆已分裝或出貨後，重量與成本不能再改。">修改後，庫存、成本與相關紀錄會自動一起更新。</span>
+                  <span title="改生豆批次、重量或成本時，會自動補扣或退回生豆、調整熟豆庫存與成本；杯測、手沖的烘後天數與 QR 履歷也會一起更新。熟豆已分裝或出貨後再改，會先提醒你確認。">修改後，庫存、成本與相關紀錄會自動一起更新。</span>
                 </Notice>
               </div>
             )}
@@ -89,16 +91,19 @@ export default function NewRoastPage() {
                 </Notice>
               </div>
             )}
-            {greens.length === 0 ? (
-              <Notice tone="warning">
-                <span className="flex flex-wrap items-center justify-between gap-3">
-                  {live ? "還沒有生豆批次可以扣庫存。平板紀錄已保存，新增完會回到這裡。" : coffee ? "這支豆子還沒有生豆庫存，先新增一筆生豆採購，完成後會回到這裡繼續烘豆。" : "還沒有生豆批次，請先新增生豆採購。"}
-                  <LinkButton size="sm" href={withNext(coffee ? `/green/new/?coffee=${coffee}` : "/green/new/", here)}>
-                    ＋ 新增生豆採購
-                  </LinkButton>
-                </span>
-              </Notice>
-            ) : roasters.data.length === 0 ? (
+            {greens.length === 0 && !edit && (
+              <div className="mb-4">
+                <Notice tone="warning">
+                  <span className="flex flex-wrap items-center justify-between gap-3">
+                    {coffee ? "這支豆子還沒有生豆採購紀錄。可以直接烘（生豆成本以 0 計、不扣生豆庫存），或先新增生豆採購，完成後會回到這裡。" : "還沒有生豆採購紀錄。可以直接選咖啡豆烘（生豆成本以 0 計），或先新增生豆採購。"}
+                    <LinkButton size="sm" variant="outline" href={withNext(coffee ? `/green/new/?coffee=${coffee}` : "/green/new/", here)}>
+                      ＋ 新增生豆採購
+                    </LinkButton>
+                  </span>
+                </Notice>
+              </div>
+            )}
+            {roasters.data.length === 0 ? (
               <Notice tone="warning">
                 <span className="flex flex-wrap items-center justify-between gap-3">
                   還沒有烘豆機，請先在系統設定新增。{live && "平板紀錄已保存，新增完再回來過帳。"}
@@ -123,7 +128,8 @@ export default function NewRoastPage() {
                 ]}
                 fields={[
                   { name: "copiedFromId", label: "", type: "hidden" },
-                  { name: "greenLotId", label: "生豆批次", type: "select", required: true, options: greens, section: "a", wide: true },
+                  { name: "greenLotId", label: "生豆批次", type: "select", options: [{ value: "", label: "沒有生豆採購（直接選下面的咖啡豆）" }, ...greens], section: "a", wide: true, hint: "選了生豆會扣生豆庫存並計算成本；庫存不夠時存檔前會提醒" },
+                  { name: "coffeeId", label: "咖啡豆（沒選生豆批次時）", type: "select", options: [{ value: "", label: "請選擇" }, ...coffees], section: "a", wide: true, hint: "有選生豆批次時，以生豆批次的咖啡豆為準" },
                   { name: "roasterId", label: "烘豆機", type: "select", required: true, options: roasters.data.map((r) => ({ value: r.id, label: r.name })), section: "a" },
                   { name: "roastedAt", label: "烘焙日期時間", type: "datetime", required: true, section: "a" },
                   { name: "greenWeightG", label: "投入生豆重量", type: "number", unit: "g", required: true, section: "a" },

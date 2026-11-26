@@ -32,7 +32,7 @@ export default function SeriesDetail() {
     <Guard loading={s.loading} error={s.error} missing={!s.data}>
       {() => (
         <>
-          <PageHeader title={`${s.data!.code}｜${s.data!.name}`} back={{ href: "/series/", label: "品牌系列" }} actions={<DeleteButton inline={false} what="品牌系列" name={s.data!.name} col="brandSeries" id={s.data!.id} redirectTo="/series/" description="還有商品屬於這個系列時不能刪除。" />} />
+          <PageHeader title={`${s.data!.code}｜${s.data!.name}`} back={{ href: "/series/", label: "品牌系列" }} actions={<DeleteButton inline={false} what="品牌系列" name={s.data!.name} col="brandSeries" id={s.data!.id} redirectTo="/series/" description="有其他紀錄用到時，會先提醒你確認。" />} />
           <div className="grid gap-6">
             <SeriesForm initial={s.data!} />
             <Card>

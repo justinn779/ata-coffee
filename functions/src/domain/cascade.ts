@@ -8,6 +8,7 @@ import { D } from "../../../src/lib/decimal";
 import { DomainError } from "../../../src/lib/errors";
 import { addDaysYmd } from "../../../src/lib/time";
 import { type Doc, type Tx } from "../tx";
+import { confirmOr } from "../soft";
 import { C, type Actor } from "../types";
 import { audit } from "./core";
 import { KIND_LABEL } from "./inventory";
@@ -166,7 +167,7 @@ export const DELETABLE: Record<string, DeletableDef> = {
       return out;
     },
     cleanup: async (tx, d) => {
-      if (await tx.get(C.items, `variant-${d.id}`)) await tx.delete(C.items, `variant-${d.id}`);
+      if ((await tx.get(C.items, `variant-${d.id}`)) && !(await hasStock(tx, `variant-${d.id}`))) await tx.delete(C.items, `variant-${d.id}`);
     },
   },
   [C.materials]: {
@@ -180,7 +181,7 @@ export const DELETABLE: Record<string, DeletableDef> = {
       return out;
     },
     cleanup: async (tx, d) => {
-      if (await tx.get(C.items, `material-${d.id}`)) await tx.delete(C.items, `material-${d.id}`);
+      if ((await tx.get(C.items, `material-${d.id}`)) && !(await hasStock(tx, `material-${d.id}`))) await tx.delete(C.items, `material-${d.id}`);
     },
   },
   [C.cuppingTemplates]: { label: "杯測評分模板", unique: "name", refs: [{ col: C.cuppings, field: "templateId", label: "杯測紀錄" }] },
@@ -202,7 +203,7 @@ export const DELETABLE: Record<string, DeletableDef> = {
       { col: C.brews, field: "coffeeId", label: "手沖紀錄" },
     ],
     cleanup: async (tx, d) => {
-      for (const k of ["green", "roasted"]) if (await tx.get(C.items, `coffee-${k}-${d.id}`)) await tx.delete(C.items, `coffee-${k}-${d.id}`);
+      for (const k of ["green", "roasted"]) if ((await tx.get(C.items, `coffee-${k}-${d.id}`)) && !(await hasStock(tx, `coffee-${k}-${d.id}`))) await tx.delete(C.items, `coffee-${k}-${d.id}`);
     },
   },
   [C.costRules]: { label: "成本分攤規則", refs: [] },
@@ -221,7 +222,7 @@ export async function deleteMaster(tx: Tx, col: string, id: string, actor: Actor
   for (const x of (await def.extra?.(tx, d)) ?? []) used.set(x, (used.get(x) ?? 0) + 1);
   if (used.size) {
     const list = [...used].map(([k, n]) => `${k} ${n} 筆`).join("、");
-    throw new DomainError(`這筆${def.label}還被使用中（${list}），不能刪除。${col === C.coffees ? "可以改用「封存」。" : "請先修改或刪除那些資料。"}`, "IN_USE", 409);
+    confirmOr(`這筆${def.label}還有 ${list} 用到。刪除後那些紀錄會保留，並標示「${def.label}已刪除」${col === C.coffees ? "（也可以改用「封存」）" : ""}。確定刪除嗎？`);
   }
   await def.cleanup?.(tx, d);
   if (def.unique && d[def.unique] != null) await tx.releaseUnique(`${col}.${def.unique}`, String(d[def.unique]));
@@ -232,7 +233,7 @@ export async function deleteMaster(tx: Tx, col: string, id: string, actor: Actor
 /** 刪除手動登記的營運費用（只限期間費用，烘焙／分裝／訂單成本請由原紀錄修改） */
 export async function deleteCostEntry(tx: Tx, id: string, actor: Actor) {
   const c = await tx.must(C.costs, id, "成本紀錄");
-  if (c.roastBatchId || c.productionOrderId || c.orderId) throw new DomainError("這筆成本屬於烘焙、分裝或訂單，請到原紀錄修改");
+  if (c.roastBatchId || c.productionOrderId || c.orderId) confirmOr("這筆成本屬於烘焙、分裝或訂單，建議到原紀錄修改；直接刪除後原紀錄的成本不會重算。仍要刪除嗎？");
   await tx.delete(C.costs, id);
   audit(tx, actor, "cost.delete", "CostEntry", id, `刪除營運費用 ${D(c.amount as string).toFixed(0)}：${c.calcNote ?? ""}`);
 }

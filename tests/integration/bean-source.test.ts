@@ -27,9 +27,11 @@ describe("沒有烘豆紀錄的杯測／手沖", () => {
     s = (await docs(C.cuppings)).find((x) => x.id === c.id)!;
     expect(s.restDays).toBe(5);
     expect(s.sampleRoastedDate).toBe("2026-11-10");
-    await expect(op("cupping.update", { id: c.id, templateId: tpl.id, roastedDate: "2026-11-20", cuppedAt: "2026-11-15T10:00", scores: {} })).rejects.toThrow(/不可早於烘焙時間/);
+    // 杯測時間早於烘焙日期：只提醒，照樣存檔
+    const w = await op<{ warnings?: string[] }>("cupping.update", { id: c.id, templateId: tpl.id, roastedDate: "2026-11-20", cuppedAt: "2026-11-15T10:00", scores: {} });
+    expect(w.warnings?.join()).toMatch(/早於烘焙時間/);
 
-    // 有紀錄的咖啡豆不能刪除
+    // 有紀錄的咖啡豆：刪除前先提醒
     await expect(op("master.delete", { col: C.coffees, id: f.coffee.id })).rejects.toThrow(/杯測紀錄/);
     await op("cupping.delete", { id: c.id });
     expect(await docs(C.cuppings)).toHaveLength(0);

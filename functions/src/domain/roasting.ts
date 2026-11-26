@@ -2,6 +2,7 @@ import { D, toDb, type Num, percent, Decimal } from "../../../src/lib/decimal";
 import { DomainError } from "../../../src/lib/errors";
 import { addDaysYmd, restDays } from "../../../src/lib/time";
 import { newId, nowIso, type Doc, type Tx } from "../tx";
+import { confirmOr, warn } from "../soft";
 import { C, type Actor, type InvLot } from "../types";
 import { audit, nextNumber } from "./core";
 import { createLot, ensureCoffeeItem, post } from "./inventory";
@@ -18,10 +19,14 @@ export function computePhases(t: RoastTimings) {
   const drying = t.dryEndSec ?? null;
   const maillard = t.dryEndSec != null && t.firstCrackStartSec != null ? t.firstCrackStartSec - t.dryEndSec : null;
   const development = t.firstCrackStartSec != null && t.dropSec != null ? t.dropSec - t.firstCrackStartSec : null;
-  if (maillard != null && maillard < 0) throw new DomainError("一爆時間不可早於轉黃點");
-  if (development != null && development < 0) throw new DomainError("下豆時間不可早於一爆時間");
-  const dtr = development != null && total ? percent(development, total) : null;
-  return { totalTimeSec: total, dryingPhaseSec: drying, maillardPhaseSec: maillard, developmentPhaseSec: development, dtrPercent: dtr };
+  // 事件時間順序不對時只提醒，不計算該段（照樣存檔）
+  const okM = maillard == null || maillard >= 0;
+  const okD = development == null || development >= 0;
+  if (!okM) warn("一爆時間早於轉黃點，梅納段沒有計算，請確認時間");
+  if (!okD) warn("下豆時間早於一爆時間，發展段沒有計算，請確認時間");
+  const dev = okD ? development : null;
+  const dtr = dev != null && total ? percent(dev, total) : null;
+  return { totalTimeSec: total, dryingPhaseSec: drying, maillardPhaseSec: okM ? maillard : null, developmentPhaseSec: dev, dtrPercent: dtr };
 }
 
 /** 失重率 = (投入 − 產出) ÷ 投入 × 100% */
@@ -52,7 +57,9 @@ export interface RoastEventInput {
 }
 
 export interface CreateRoastInput {
-  greenLotId: string;
+  /** 生豆批次（選填）；沒有生豆採購時改填 coffeeId，生豆成本以 0 計 */
+  greenLotId?: string | null;
+  coffeeId?: string | null;
   roasterId: string;
   roastedAt: string;
   greenWeightG: Num;
@@ -110,16 +117,29 @@ function recordFields(input: CreateRoastInput, phases: ReturnType<typeof compute
   };
 }
 
+/** 生豆批次（可沒有）與咖啡豆 */
+async function roastSource(tx: Tx, input: CreateRoastInput) {
+  const green = input.greenLotId ? await tx.must(C.greenLots, input.greenLotId, "生豆批次") : null;
+  const coffeeId = (green?.coffeeId as string | undefined) ?? input.coffeeId;
+  if (!coffeeId) throw new DomainError("請選擇生豆批次，或選擇咖啡豆（沒有生豆採購時）");
+  const coffee = await tx.must(C.coffees, coffeeId, "咖啡豆");
+  const greenLot = green?.invLotId ? await tx.get<InvLot>(C.lots, green.invLotId as string) : null;
+  if (!green) warn("這批沒有對應的生豆採購，生豆成本以 0 計算、不扣生豆庫存；之後可以在烘焙紀錄補選生豆批次");
+  return { green, coffee, greenLot };
+}
+
+function capacityWarn(roaster: Doc, greenWeightG: Num) {
+  if (roaster.maxCapacityG && D(greenWeightG).gt(roaster.maxCapacityG as string)) warn(`投入量 ${greenWeightG}g 超過 ${roaster.name} 最大容量 ${roaster.maxCapacityG}g`);
+}
+
 export async function createRoastBatch(tx: Tx, input: CreateRoastInput, actor: Actor) {
-  const green = await tx.must(C.greenLots, input.greenLotId, "生豆批次");
-  const coffee = await tx.must(C.coffees, green.coffeeId as string, "咖啡豆");
+  const { green, coffee, greenLot } = await roastSource(tx, input);
   const roaster = await tx.must(C.roasters, input.roasterId, "烘豆機");
-  if (roaster.maxCapacityG && D(input.greenWeightG).gt(roaster.maxCapacityG as string)) throw new DomainError(`投入量超過 ${roaster.name} 最大容量 ${roaster.maxCapacityG}g`);
+  capacityWarn(roaster, input.greenWeightG);
   if (input.qualityRating != null && (input.qualityRating < 1 || input.qualityRating > 10)) throw new DomainError("品質評價需介於 1–10");
   const loss = weightLoss(input.greenWeightG, input.roastedWeightG);
   const phases = computePhases(input);
-  const greenLot = await tx.must<InvLot>(C.lots, green.invLotId as string, "生豆庫存批次");
-  const greenCost = D(input.greenWeightG).mul(greenLot.unitCost);
+  const greenCost = greenLot ? D(input.greenWeightG).mul(greenLot.unitCost) : D(0);
   const extras = input.extraCosts ?? [];
   const extraTotal = extras.reduce((s, c) => s.add(c.amount), D(0));
   const roastedUnitCost = greenCost.add(extraTotal).div(input.roastedWeightG);
@@ -127,8 +147,8 @@ export async function createRoastBatch(tx: Tx, input: CreateRoastInput, actor: A
   const batchNo = await nextNumber(tx, "RB");
   const batch = tx.create(C.roastBatches, {
     batchNo,
-    greenLotId: green.id,
-    greenLotCode: green.lotCode,
+    greenLotId: green?.id ?? null,
+    greenLotCode: (green?.lotCode as string | undefined) ?? null,
     coffeeId: coffee.id,
     coffeeName: coffee.nameZh,
     roasterId: roaster.id,
@@ -149,7 +169,7 @@ export async function createRoastBatch(tx: Tx, input: CreateRoastInput, actor: A
     tx.create(C.costs, { category: c.category, target: "ROAST_BATCH", amount: toDb(c.amount, 2), isEstimate: c.isEstimate, occurredOn: addDaysYmd(new Date(input.roastedAt), 0), roastBatchId: batch.id, productionOrderId: null, orderId: null, calcNote: c.calcNote ?? null, note: null, createdAt: nowIso() });
   }
   const groupId = newId();
-  await post(tx, { lotId: greenLot.id, type: "ROAST_ISSUE", quantity: D(input.greenWeightG).neg(), refType: "RoastBatch", refId: batch.id, groupId, actor, occurredAt: input.roastedAt, note: `烘焙 ${batchNo}` });
+  if (greenLot) await post(tx, { lotId: greenLot.id, type: "ROAST_ISSUE", quantity: D(input.greenWeightG).neg(), refType: "RoastBatch", refId: batch.id, groupId, actor, occurredAt: input.roastedAt, note: `烘焙 ${batchNo}` });
   const roastedItem = await ensureCoffeeItem(tx, coffee.id, "ROASTED");
   const shelf = input.shelfLifeDays ?? (coffee.shelfLifeDays as number | null);
   const roastedLot = await createLot(tx, {
@@ -196,7 +216,7 @@ async function syncLabRecords(tx: Tx, rb: Doc) {
     const at = col === C.cuppings ? "cuppedAt" : "brewedAt";
     const what = col === C.cuppings ? "杯測" : "手沖";
     for (const s of await tx.query(col, [["roastBatchId", "==", rb.id]])) {
-      if ((s[at] as string) < (rb.roastedAt as string)) throw new DomainError(`烘焙時間不可晚於這批已有的${what}紀錄（${String(s[at]).slice(0, 16).replace("T", " ")}）`);
+      if ((s[at] as string) < (rb.roastedAt as string)) warn(`烘焙時間晚於這批已有的${what}紀錄（${String(s[at]).slice(0, 16).replace("T", " ")}），請確認時間`);
       await tx.update(col, s.id, { batchNo: rb.batchNo, coffeeId: rb.coffeeId, coffeeName: rb.coffeeName, restDays: restDays(new Date(rb.roastedAt as string), new Date(s[at] as string)) });
     }
   }
@@ -210,36 +230,41 @@ async function syncLabRecords(tx: Tx, rb: Doc) {
  */
 export async function updateRoastBatch(tx: Tx, id: string, input: CreateRoastInput, actor: Actor) {
   const cur = await tx.must(C.roastBatches, id, "烘焙批次");
-  const green = await tx.must(C.greenLots, input.greenLotId, "生豆批次");
-  if (green.coffeeId !== cur.coffeeId) throw new DomainError("不能改成不同咖啡豆的生豆批次；請刪除這批後重新過帳");
+  // 沒選生豆、也沒選咖啡豆時沿用原本的咖啡豆
+  const green = input.greenLotId ? await tx.must(C.greenLots, input.greenLotId, "生豆批次") : null;
+  const coffeeId = (green?.coffeeId as string | undefined) ?? input.coffeeId ?? (cur.coffeeId as string);
+  const coffee = (await tx.get(C.coffees, coffeeId)) ?? { id: coffeeId, nameZh: cur.coffeeName, shelfLifeDays: null };
+  const coffeeChanged = coffeeId !== cur.coffeeId;
+  if (coffeeChanged) warn(`這批烘焙改成咖啡豆「${coffee.nameZh}」，熟豆庫存與這批的杯測、手沖紀錄一起改到新的咖啡豆`);
   const roaster = await tx.must(C.roasters, input.roasterId, "烘豆機");
-  if (roaster.maxCapacityG && D(input.greenWeightG).gt(roaster.maxCapacityG as string)) throw new DomainError(`投入量超過 ${roaster.name} 最大容量 ${roaster.maxCapacityG}g`);
+  capacityWarn(roaster, input.greenWeightG);
   if (input.qualityRating != null && (input.qualityRating < 1 || input.qualityRating > 10)) throw new DomainError("品質評價需介於 1–10");
   const loss = weightLoss(input.greenWeightG, input.roastedWeightG);
   const phases = computePhases(input);
-  const coffee = await tx.must(C.coffees, cur.coffeeId as string, "咖啡豆");
-  const newGreenLot = await tx.must<InvLot>(C.lots, green.invLotId as string, "生豆庫存批次");
-  const oldGreen = await tx.must(C.greenLots, cur.greenLotId as string, "原生豆批次");
+  const newGreenLot = green?.invLotId ? await tx.get<InvLot>(C.lots, green.invLotId as string) : null;
+  const oldGreen = cur.greenLotId ? await tx.get(C.greenLots, cur.greenLotId as string) : null;
   const oldCosts = (await tx.query(C.costs, [["roastBatchId", "==", id]])).filter((c) => c.target === "ROAST_BATCH");
   const extras = input.extraCosts ?? [];
   const oldExtra = oldCosts.reduce((s, c) => s.add(c.amount as string), D(0));
   const newExtra = extras.reduce((s, c) => s.add(c.amount), D(0));
-  const sameGreen = green.id === cur.greenLotId;
-  const greenCost = sameGreen && D(input.greenWeightG).eq(cur.greenWeightG as string) ? D(cur.greenCostTotal as string) : D(input.greenWeightG).mul(newGreenLot.unitCost);
+  const sameGreen = (green?.id ?? null) === ((cur.greenLotId as string | null) ?? null);
+  const greenCost = sameGreen && D(input.greenWeightG).eq(cur.greenWeightG as string) ? D(cur.greenCostTotal as string) : newGreenLot ? D(input.greenWeightG).mul(newGreenLot.unitCost) : D(0);
   const invChanged = !sameGreen || !D(input.greenWeightG).eq(cur.greenWeightG as string) || !D(input.roastedWeightG).eq(cur.roastedWeightG as string) || !oldExtra.eq(newExtra);
   const { lot, used } = await roastedLotUsage(tx, cur);
   const batchNo = cur.batchNo as string;
+  if (!green && !sameGreen) warn("這批改成沒有對應的生豆採購，生豆成本以 0 計算");
   if (invChanged) {
-    if (used) throw new DomainError("這批熟豆已被分裝、出貨、保留或盤點調整，生豆批次、重量與成本不能再修改（其他欄位可以改）");
+    if (used) confirmOr("這批熟豆已被分裝、出貨、保留或盤點調整過。改了生豆批次、重量或成本後，已經分裝或出貨的成本不會跟著變，熟豆庫存也可能變成負數。仍要修改嗎？");
     const groupId = newId();
     const note = `修改烘焙 ${batchNo}`;
     const base = { refType: "RoastBatch", refId: id, groupId, actor, occurredAt: input.roastedAt };
     if (sameGreen) {
       const diff = D(cur.greenWeightG as string).sub(input.greenWeightG);
-      if (!diff.isZero()) await post(tx, { ...base, lotId: newGreenLot.id, type: "ROAST_ISSUE", quantity: diff, note: `${note}：投入量 ${cur.greenWeightG}g → ${input.greenWeightG}g` });
+      if (!diff.isZero() && newGreenLot) await post(tx, { ...base, lotId: newGreenLot.id, type: "ROAST_ISSUE", quantity: diff, note: `${note}：投入量 ${cur.greenWeightG}g → ${input.greenWeightG}g` });
     } else {
-      await post(tx, { ...base, lotId: oldGreen.invLotId as string, type: "ROAST_ISSUE", quantity: cur.greenWeightG as string, note: `${note}：改用 ${green.lotCode}，退回原領料` });
-      await post(tx, { ...base, lotId: newGreenLot.id, type: "ROAST_ISSUE", quantity: D(input.greenWeightG).neg(), note: `${note}：由 ${oldGreen.lotCode} 改用此批` });
+      const oldLot = oldGreen?.invLotId ? await tx.get<InvLot>(C.lots, oldGreen.invLotId as string) : null;
+      if (oldLot && oldLot.status !== "SCRAPPED") await post(tx, { ...base, lotId: oldLot.id, type: "ROAST_ISSUE", quantity: cur.greenWeightG as string, note: `${note}：改用 ${green?.lotCode ?? "（無生豆採購）"}，退回原領料` });
+      if (newGreenLot) await post(tx, { ...base, lotId: newGreenLot.id, type: "ROAST_ISSUE", quantity: D(input.greenWeightG).neg(), note: `${note}：由 ${oldGreen?.lotCode ?? cur.greenLotCode ?? "（無生豆採購）"} 改用此批` });
     }
     const rdiff = D(input.roastedWeightG).sub(cur.roastedWeightG as string);
     await tx.update(C.lots, lot.id, { unitCost: toDb(greenCost.add(newExtra).div(input.roastedWeightG), 6), updatedAt: nowIso() });
@@ -248,14 +273,21 @@ export async function updateRoastBatch(tx: Tx, id: string, input: CreateRoastInp
   for (const c of oldCosts) await tx.delete(C.costs, c.id);
   for (const c of extras) tx.create(C.costs, { category: c.category, target: "ROAST_BATCH", amount: toDb(c.amount, 2), isEstimate: c.isEstimate, occurredOn: addDaysYmd(new Date(input.roastedAt), 0), roastBatchId: id, productionOrderId: null, orderId: null, calcNote: c.calcNote ?? null, note: null, createdAt: nowIso() });
   const shelf = input.shelfLifeDays ?? (coffee.shelfLifeDays as number | null);
+  if (coffeeChanged) {
+    const item = await ensureCoffeeItem(tx, coffeeId, "ROASTED");
+    await tx.update(C.lots, lot.id, { itemId: item.id, itemName: item.name, coffeeId });
+  }
   await tx.update(C.lots, lot.id, {
     producedAt: input.roastedAt,
     expiryDate: shelf != null ? addDaysYmd(new Date(input.roastedAt), shelf) : null,
     expirySource: shelf == null ? null : input.shelfLifeDays != null ? "烘焙批次覆寫保存期限" : "咖啡豆預設保存期限",
   });
   const next = await tx.update(C.roastBatches, id, {
-    greenLotId: green.id,
-    greenLotCode: green.lotCode,
+    greenLotId: green?.id ?? null,
+    greenLotCode: green ? (green.lotCode as string) : sameGreen ? ((cur.greenLotCode as string | null) ?? null) : null,
+    greenLotDeleted: green ? false : sameGreen ? (cur.greenLotDeleted ?? false) : false,
+    coffeeId,
+    coffeeName: coffee.nameZh,
     roasterId: roaster.id,
     roasterName: roaster.name,
     roastedAt: input.roastedAt,
@@ -270,20 +302,33 @@ export async function updateRoastBatch(tx: Tx, id: string, input: CreateRoastInp
   audit(tx, actor, "roast.update", "RoastBatch", id, `修改烘焙 ${batchNo}${invChanged ? `：${input.greenWeightG}g → ${input.roastedWeightG}g（已調整庫存）` : ""}`);
 }
 
-/** 刪除烘焙批次：退回生豆、扣回熟豆，並刪除曲線與成本；已有杯測／手沖或熟豆已被使用時不可刪 */
+/**
+ * 刪除烘焙批次：先提醒有哪些紀錄用到它，確認後只刪這筆烘焙；杯測、手沖保留原本的批號與烘焙日期，標示「烘焙紀錄已刪除」。
+ * - 熟豆還沒被分裝、出貨等使用：退回生豆、扣回熟豆（跟原本一樣）。
+ * - 熟豆已被使用：庫存維持現狀（熟豆批次與帳本保留），只刪除烘焙紀錄。
+ */
 export async function deleteRoastBatch(tx: Tx, id: string, actor: Actor) {
   const cur = await tx.must(C.roastBatches, id, "烘焙批次");
   const cups = await tx.query(C.cuppings, [["roastBatchId", "==", id]]);
   const brews = await tx.query(C.brews, [["roastBatchId", "==", id]]);
-  if (cups.length || brews.length) throw new DomainError(`這批還有 ${cups.length} 筆杯測、${brews.length} 筆手沖紀錄，請先刪除那些紀錄`);
   const { lot, used } = await roastedLotUsage(tx, cur);
-  if (used) throw new DomainError("這批熟豆已被分裝、出貨、保留或盤點調整，不能刪除");
-  const green = await tx.must(C.greenLots, cur.greenLotId as string, "生豆批次");
+  const notes = [cups.length ? `${cups.length} 筆杯測` : "", brews.length ? `${brews.length} 筆手沖` : ""].filter(Boolean);
+  const msgs = [notes.length ? `這批還有 ${notes.join("、")}紀錄（會保留，標示烘焙紀錄已刪除）` : "", used ? "熟豆已被分裝、出貨、保留或盤點調整，刪除後熟豆庫存維持現狀、不退回生豆" : ""].filter(Boolean);
+  if (msgs.length) confirmOr(`${msgs.join("；")}。確定刪除烘焙批次 ${cur.batchNo} 嗎？`);
+  for (const [col, list] of [[C.cuppings, cups], [C.brews, brews]] as const) {
+    for (const s of list) await tx.update(col, s.id, { roastBatchId: null, roastDeleted: true, sampleRoastedDate: String(cur.roastedAt).slice(0, 10), updatedAt: nowIso() });
+  }
   const groupId = newId();
   const note = `刪除烘焙 ${cur.batchNo}`;
-  if (D(lot.onHand).gt(0)) await post(tx, { lotId: lot.id, type: "ROAST_OUTPUT", quantity: D(lot.onHand).neg(), refType: "RoastBatch", refId: id, groupId, actor, note });
-  await post(tx, { lotId: green.invLotId as string, type: "ROAST_ISSUE", quantity: cur.greenWeightG as string, refType: "RoastBatch", refId: id, groupId, actor, note: `${note}：退回生豆` });
-  await tx.update(C.lots, lot.id, { status: "SCRAPPED", note: `${note}（批次已刪除）`, updatedAt: nowIso() });
+  if (!used) {
+    const green = cur.greenLotId ? await tx.get(C.greenLots, cur.greenLotId as string) : null;
+    const greenLot = green?.invLotId ? await tx.get<InvLot>(C.lots, green.invLotId as string) : null;
+    if (D(lot.onHand).gt(0)) await post(tx, { lotId: lot.id, type: "ROAST_OUTPUT", quantity: D(lot.onHand).neg(), refType: "RoastBatch", refId: id, groupId, actor, note });
+    if (greenLot && greenLot.status !== "SCRAPPED") await post(tx, { lotId: greenLot.id, type: "ROAST_ISSUE", quantity: cur.greenWeightG as string, refType: "RoastBatch", refId: id, groupId, actor, note: `${note}：退回生豆` });
+    await tx.update(C.lots, lot.id, { status: "SCRAPPED", note: `${note}（批次已刪除）`, updatedAt: nowIso() });
+  } else {
+    await tx.update(C.lots, lot.id, { note: `烘焙紀錄 ${cur.batchNo} 已刪除`, updatedAt: nowIso() });
+  }
   for (const c of await tx.query(C.costs, [["roastBatchId", "==", id]])) await tx.delete(C.costs, c.id);
   for (const c of await tx.query(C.roastCurves, [["roastBatchId", "==", id]])) {
     for (let i = 0; i < ((c.chunkCount as number) ?? 0); i++) await tx.delete(`${C.roastCurves}/${c.id}/chunks`, String(i));

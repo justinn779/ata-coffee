@@ -4,7 +4,7 @@ import { opAction } from "@/lib/api";
 import { ActionDialog } from "./action-dialog";
 
 /**
- * 刪除按鈕（含確認）。預設呼叫 master.delete（主檔），仍被其他資料使用時後端會拒絕並說明原因。
+ * 刪除按鈕（含確認）。預設呼叫 master.delete（主檔）；仍被其他資料使用時後端會先提醒，確認後照樣刪除。
  * 其他資料（烘焙、生豆採購、訂單…）傳入對應的 op。
  */
 export function DeleteButton({
@@ -35,7 +35,7 @@ export function DeleteButton({
       size={inline ? "sm" : "md"}
       variant={inline ? "ghost" : "danger"}
       title={`刪除${what}${name ? `「${name}」` : ""}？`}
-      description={description ?? "刪除後無法復原（操作紀錄會保留）。如果這筆資料還被其他紀錄使用，系統會提示，不會刪除。"}
+      description={description ?? "刪除後無法復原（操作紀錄會保留）。如果還有其他紀錄用到它，會先提醒你，確認後只刪這一筆，其他紀錄保留。"}
       confirmLabel="確認刪除"
       payload={payload ?? (col ? { col, id } : { id })}
       action={opAction(op)}

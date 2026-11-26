@@ -46,7 +46,7 @@ export default function CuppingDetail() {
                   <KV
                     cols={4}
                     items={[
-                      ["烘焙批次", x.roastBatchId ? <A key="r" href={`/roasting/view/?id=${x.roastBatchId}`}>{x.batchNo}</A> : `樣品（沒有烘豆紀錄）${x.sampleRoastedDate ? `・烘焙日 ${x.sampleRoastedDate}` : ""}`],
+                      ["烘焙批次", x.roastBatchId ? <A key="r" href={`/roasting/view/?id=${x.roastBatchId}`}>{x.batchNo}</A> : `${x.roastDeleted ? `${x.batchNo}（烘焙紀錄已刪除）` : "樣品（沒有烘豆紀錄）"}${x.sampleRoastedDate ? `・烘焙日 ${x.sampleRoastedDate}` : ""}`],
                       ["研磨度", x.grindSetting],
                       ["粉量／水量", `${fmtNum(x.doseG, 2)} g／${fmtNum(x.waterG, 1)} g`],
                       ["水溫", x.waterTempC ? `${x.waterTempC}°C` : "—"],

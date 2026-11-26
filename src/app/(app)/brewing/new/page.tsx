@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
 
-/** 新增手沖；?copy= 複製參數；?edit=<id> 修改（烘焙批次不可變更）；?coffee= 只列這支豆子；?sample=1 不經過烘豆紀錄 */
+/** 新增手沖；?copy= 複製參數；?edit=<id> 修改（可以改選烘焙批次或改成沒有烘豆紀錄）；?coffee= 只列這支豆子；?sample=1 不經過烘豆紀錄 */
 export default function NewBrewPage() {
   const roast = useQS("roast");
   const coffee = useQS("coffee");
@@ -33,7 +33,7 @@ export default function NewBrewPage() {
       {() => {
         const edit = editId ? src.data : null;
         const base: Row | null = src.data ?? recipe.data;
-        const sample = edit ? !edit.roastBatchId : copy && src.data ? !src.data.roastBatchId && !roast : sampleMode(sp, roast, roasts.length);
+        const sample = edit && !sp.get("sample") ? !edit.roastBatchId : copy && src.data ? !src.data.roastBatchId && !roast : sampleMode(sp, roast, roasts.length);
         const plan = src.data ? (src.data.pourSteps as Row[]) : ((recipe.data?.pourPlan as Row[]) ?? []);
         const defaults = {
           roastBatchId: roast ?? s(src.data?.roastBatchId),
@@ -62,8 +62,8 @@ export default function NewBrewPage() {
         };
         return (
           <>
-            <PageHeader title={edit ? "修改手沖紀錄" : src.data ? "複製手沖參數" : recipe.data ? `使用配方：${recipe.data.name} v${recipe.data.version}` : "新增手沖紀錄"} description="粉水比、烘後天數、累積水量自動計算；分段注水合計需等於總水量" back={edit ? { href: `/brewing/view/?id=${edit.id}`, label: "沖煮紀錄" } : { href: "/brewing/", label: "手沖" }} />
-            {!edit && <SourceSwitch sample={sample} />}
+            <PageHeader title={edit ? "修改手沖紀錄" : src.data ? "複製手沖參數" : recipe.data ? `使用配方：${recipe.data.name} v${recipe.data.version}` : "新增手沖紀錄"} description="粉水比、烘後天數、累積水量自動計算；分段注水合計跟總水量不同時會提醒" back={edit ? { href: `/brewing/view/?id=${edit.id}`, label: "沖煮紀錄" } : { href: "/brewing/", label: "手沖" }} />
+            <SourceSwitch sample={sample} />
             <EntityForm
               key={`${sample}-${coffees.length}-${roasts.length}-${grinders.length}-${drippers.length}-${recipes.data.length}-${legacy.data.length}`}
               draftKey={src.data || recipe.data ? undefined : sample ? "brew-new-sample" : "brew-new"}
@@ -76,11 +76,9 @@ export default function NewBrewPage() {
                 { key: "d", title: "結果與評價" },
               ]}
               fields={[
-                edit
-                  ? { name: "roastBatchId", label: "", type: "hidden" }
-                  : sample
-                    ? { name: "coffeeId", label: "咖啡豆", type: "select", required: true, options: coffees, section: "a", wide: true }
-                    : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
+                sample
+                  ? { name: "coffeeId", label: "咖啡豆", type: "select", required: true, options: coffees, section: "a", wide: true }
+                  : { name: "roastBatchId", label: "烘焙批次", type: "select", required: true, options: roasts, section: "a", wide: true },
                 ...(sample ? [{ name: "roastedDate", label: "烘焙日期（選填）", type: "date" as const, section: "a", hint: "填了才會計算烘後天數" }] : []),
                 { name: "brewedAt", label: "沖煮時間", type: "datetime", required: true, section: "a" },
                 { name: "recipeId", label: "使用配方", type: "select", options: recipes.data.map((r) => ({ value: r.id, label: `${r.name} v${r.version}` })), section: "a" },

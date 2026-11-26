@@ -49,15 +49,26 @@ export function useCoffeeOptions(): Opt[] {
   return data.filter((c) => !c.archivedAt).map((c) => ({ value: c.id, label: `${c.code}｜${c.nameZh}` }));
 }
 
-/** 有庫存的生豆批次；include 為修改時目前使用的生豆批次（即使已用完也列出）；coffeeId 只列這支豆子 */
+/** 庫存提示文字：沒有庫存也照樣列出，存檔時系統會提醒 */
+const stockHint = (avail: ReturnType<typeof D>, dp: number) => (avail.gt(0) ? `可用 ${avail.toFixed(dp)}g` : avail.isZero() ? "已用完" : `庫存不足 ${avail.toFixed(dp)}g`);
+const byStock = (a: Row, b: Row) => Number(D(b.onHand).sub(b.reserved).gt(0)) - Number(D(a.onHand).sub(a.reserved).gt(0));
+
+/** 生豆批次（有庫存的排前面；沒庫存的也列出）；coffeeId 只列這支豆子，include 為修改時目前使用的生豆批次 */
 export function useGreenLotOptions(include?: string | null, coffeeId?: string | null): Opt[] {
   const { data } = useCol("invLots", [["kind", "GREEN"]], "createdAt");
-  return data.filter((l) => l.greenLotId && (!coffeeId || l.coffeeId === coffeeId || l.greenLotId === include) && (D(l.onHand).gt(0) || l.greenLotId === include)).map((l) => ({ value: l.greenLotId, label: `${l.lotCode}｜${String(l.itemName).replace("生豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(0)}g）` }));
+  return data
+    .filter((l) => l.greenLotId && (l.status !== "SCRAPPED" || l.greenLotId === include) && (!coffeeId || l.coffeeId === coffeeId || l.greenLotId === include))
+    .sort(byStock)
+    .map((l) => ({ value: l.greenLotId, label: `${l.lotCode}｜${String(l.itemName).replace("生豆｜", "")}（${stockHint(D(l.onHand).sub(l.reserved), 0)}）` }));
 }
 
+/** 熟豆批次（有庫存的排前面；沒庫存的也列出） */
 export function useRoastedLotOptions(coffeeId?: string | null): Opt[] {
   const { data } = useCol("invLots", [["kind", "ROASTED"]], "createdAt");
-  return data.filter((l) => l.status === "AVAILABLE" && D(l.onHand).gt(0) && (!coffeeId || l.coffeeId === coffeeId)).map((l) => ({ value: l.id, label: `${l.lotCode}｜${String(l.itemName).replace("熟豆｜", "")}（可用 ${D(l.onHand).sub(l.reserved).toFixed(1)}g）` }));
+  return data
+    .filter((l) => l.status !== "SCRAPPED" && (!coffeeId || l.coffeeId === coffeeId))
+    .sort(byStock)
+    .map((l) => ({ value: l.id, label: `${l.lotCode}｜${String(l.itemName).replace("熟豆｜", "")}（${stockHint(D(l.onHand).sub(l.reserved), 1)}${l.status === "HOLD" ? "，品質保留" : ""}）` }));
 }
 
 export function useRoastBatchOptions(coffeeId?: string | null): Opt[] {

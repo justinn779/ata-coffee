@@ -47,7 +47,7 @@ describe("修改／刪除烘焙批次", () => {
     await expectReconciled();
   });
 
-  it("改烘焙時間：杯測的烘後天數一起更新；不可晚於杯測時間", async () => {
+  it("改烘焙時間：杯測的烘後天數一起更新；晚於杯測時間只提醒", async () => {
     const f = await baseFixture();
     const g = await receiveGreen(f.coffee.id);
     const r = await roast(g.id, f.roaster.id);
@@ -56,18 +56,27 @@ describe("修改／刪除烘焙批次", () => {
     expect((await get(C.cuppings, c.id))!.restDays).toBe(5);
     await op("roast.update", roastForm(r.batch, { roastedAt: "2026-11-12T09:00" }));
     expect((await get(C.cuppings, c.id))!.restDays).toBe(3);
-    await expect(op("roast.update", roastForm(r.batch, { roastedAt: "2026-11-16T09:00" }))).rejects.toThrow(/不可晚於/);
+    const w = await op<{ warnings?: string[] }>("roast.update", roastForm(r.batch, { roastedAt: "2026-11-16T09:00" }));
+    expect(w.warnings?.join()).toMatch(/晚於這批已有的杯測/);
+    expect((await get(C.cuppings, c.id))!.restDays).toBe(-1);
   });
 
-  it("熟豆已分裝後：重量不能改，但備註等欄位可以改", async () => {
+  it("熟豆已分裝後：改重量、刪除前先提醒；備註等欄位直接可以改", async () => {
     const f = await baseFixture();
     const g = await receiveGreen(f.coffee.id);
     const r = await roast(g.id, f.roaster.id);
     await packageUnits(r.roastedLotId, f.v100.id, 2);
-    await expect(op("roast.update", roastForm(r.batch, { roastedWeightG: "400" }))).rejects.toThrow(/不能再修改/);
+    await expect(op("roast.update", roastForm(r.batch, { roastedWeightG: "400" }))).rejects.toThrow(/已被分裝/);
     await op("roast.update", roastForm(r.batch, { note: "補充備註" }));
     expect((await get(C.roastBatches, r.batch.id))!.note).toBe("補充備註");
-    await expect(op("roast.delete", { id: r.batch.id })).rejects.toThrow(/不能刪除/);
+    await expect(op("roast.delete", { id: r.batch.id })).rejects.toThrow(/熟豆已被分裝/);
+    // 確認後照樣改：熟豆庫存依差額調整
+    await op("roast.update", { ...roastForm(r.batch, { roastedWeightG: "400" }), force: true });
+    expect(n((await lotOf(r.roastedLotId)).onHand)).toBe(400 - 200);
+    // 確認後照樣刪除：熟豆庫存維持現狀
+    await op("roast.delete", { id: r.batch.id, force: true });
+    expect(await get(C.roastBatches, r.batch.id)).toBeNull();
+    expect(n((await lotOf(r.roastedLotId)).onHand)).toBe(200);
     await expectReconciled();
   });
 
@@ -142,7 +151,7 @@ describe("主檔改名連動與刪除", () => {
     const r = await roast(g.id, f.roaster.id);
     await op("roaster.save", { id: f.roaster.id, name: "Olomo 新名", brand: "Olomo", model: "TEST" });
     expect((await get(C.roastBatches, r.batch.id))!.roasterName).toBe("Olomo 新名");
-    await expect(op("master.delete", { col: "roasters", id: f.roaster.id })).rejects.toThrow(/使用中.*烘焙批次 1 筆/);
+    await expect(op("master.delete", { col: "roasters", id: f.roaster.id })).rejects.toThrow(/烘焙批次 1 筆/);
     const s = await op<{ id: string }>("supplier.save", { code: "SUP-1", name: "供應商" });
     await op("master.delete", { col: "suppliers", id: s.id });
     expect(await get(C.suppliers, s.id)).toBeNull();

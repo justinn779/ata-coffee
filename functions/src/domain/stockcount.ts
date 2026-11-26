@@ -5,11 +5,12 @@
  *  - countId 冪等：重複送出不會重複調整
  */
 import { D, toDb, type Num } from "../../../src/lib/decimal";
-import { DomainError, InvalidStateError } from "../../../src/lib/errors";
+import { DomainError } from "../../../src/lib/errors";
 import { nowIso, newId, type Tx } from "../tx";
 import { C, type Actor, type InvLot } from "../types";
 import { audit, nextNumber } from "./core";
 import { post } from "./inventory";
+import { confirmOr } from "../soft";
 
 export const MAX_COUNT_LINES = 120;
 
@@ -35,8 +36,8 @@ export async function submitStockCount(tx: Tx, input: StockCountInput, actor: Ac
     const counted = D(l.counted);
     if (counted.isNegative()) throw new DomainError(`${lot.lotCode} 實盤數量不可為負`);
     if (lot.unit === "PCS" && !counted.isInteger()) throw new DomainError(`${lot.lotCode} 以件計，實盤數量需為整數`);
-    if (!D(lot.onHand).eq(l.expected)) throw new InvalidStateError(`${lot.lotCode} 在盤點期間有異動（目前帳面 ${D(lot.onHand)}，盤點時 ${D(l.expected)}），請重新載入後再送出`);
-    if (counted.lt(lot.reserved)) throw new InvalidStateError(`${lot.lotCode} 實盤 ${counted} 少於已保留 ${D(lot.reserved)}（訂單或分裝單已預留），請先處理保留再盤點`);
+    if (!D(lot.onHand).eq(l.expected)) confirmOr(`${lot.lotCode} 在盤點期間有異動（目前帳面 ${D(lot.onHand)}，盤點時 ${D(l.expected)}）。仍要以實盤 ${counted} 為準嗎？`);
+    if (counted.lt(lot.reserved)) confirmOr(`${lot.lotCode} 實盤 ${counted} 少於已保留 ${D(lot.reserved)}（訂單或分裝單已預留），之後那些訂單或分裝可能不夠。仍要送出嗎？`);
     const diff = counted.sub(lot.onHand);
     let txId: string | null = null;
     if (!diff.isZero()) {

@@ -2,6 +2,7 @@ import { D, toDb, type Num } from "../../../src/lib/decimal";
 import { DomainError } from "../../../src/lib/errors";
 import { restDays } from "../../../src/lib/time";
 import { nowIso, type Doc, type Tx } from "../tx";
+import { warn } from "../soft";
 import { C, type Actor } from "../types";
 import { audit } from "./core";
 import { manualAdjust, reverseTransaction } from "./inventory";
@@ -31,7 +32,7 @@ async function syncStock(tx: Tx, rec: Doc | null, o: { lotId: string; type: "CUP
   }
   const cur = curId ? await tx.get(C.txs, curId) : null;
   const active = cur && !(await tx.get("invTxReversals", cur.id)) ? cur : null;
-  if (active && want && D(active.quantity as string).neg().eq(want)) return active.id;
+  if (active && want && active.lotId === o.lotId && D(active.quantity as string).neg().eq(want)) return active.id;
   if (active) await reverseTransaction(tx, active.id, o.actor, `${o.note} 修改／刪除，沖銷原扣庫存`);
   if (!want) return null;
   return (await manualAdjust(tx, { lotId: o.lotId, type: o.type, quantity: want.neg(), actor: o.actor, note: o.note })).id;
@@ -48,25 +49,47 @@ export interface BeanSource {
 }
 type Source = { rb: Doc | null; coffeeId: string; coffeeName: string; batchNo: string; roastedAt: string | null };
 
+/**
+ * 修改時可以改選來源：有傳 roastBatchId 或 coffeeId 就用新的，否則沿用原本的。
+ * 原本的烘焙紀錄已刪除（roastDeleted）時保留原批號；咖啡豆已刪除時沿用原名稱。
+ */
 async function beanSource(tx: Tx, i: BeanSource, cur?: Doc | null): Promise<Source> {
-  const rbId = cur ? ((cur.roastBatchId as string | null) ?? null) : (i.roastBatchId ?? null);
+  const given = i.roastBatchId !== undefined || i.coffeeId !== undefined;
+  const keep = !!cur && !given;
+  const changed = !!cur && given && ((i.roastBatchId ?? null) !== ((cur.roastBatchId as string | null) ?? null) || (!i.roastBatchId && i.coffeeId != null && i.coffeeId !== cur.coffeeId));
+  const rbId = keep ? ((cur!.roastBatchId as string | null) ?? null) : (i.roastBatchId ?? null);
   if (rbId) {
     const rb = await tx.must(C.roastBatches, rbId, "烘焙批次");
     return { rb, coffeeId: rb.coffeeId as string, coffeeName: rb.coffeeName as string, batchNo: rb.batchNo as string, roastedAt: rb.roastedAt as string };
   }
-  const coffeeId = cur ? (cur.coffeeId as string) : i.coffeeId;
+  const coffeeId = (keep ? undefined : i.coffeeId) ?? (cur?.coffeeId as string | undefined);
   if (!coffeeId) throw new DomainError("請選擇烘焙批次，或選擇咖啡豆（沒有烘豆紀錄時）");
-  const c = await tx.must(C.coffees, coffeeId, "咖啡豆");
-  return { rb: null, coffeeId: c.id, coffeeName: c.nameZh as string, batchNo: "樣品", roastedAt: i.roastedDate ? `${i.roastedDate}T00:00:00+08:00` : null };
+  const c = await tx.get(C.coffees, coffeeId);
+  if (!c && (!cur || coffeeId !== cur.coffeeId)) throw new DomainError("找不到咖啡豆", "NOT_FOUND", 404);
+  const keepNo = cur && !changed && cur.roastDeleted ? (cur.batchNo as string) : "樣品";
+  return { rb: null, coffeeId, coffeeName: (c?.nameZh as string) ?? (cur?.coffeeName as string), batchNo: keepNo, roastedAt: i.roastedDate ? `${i.roastedDate}T00:00:00+08:00` : null };
+}
+
+function timeWarn(what: string, at: string, roastedAt: string | null) {
+  if (roastedAt && new Date(at) < new Date(roastedAt)) warn(`${what}時間早於烘焙時間（${roastedAt.slice(0, 10)}），烘後天數會是負的，請確認時間`);
 }
 const srcFields = (s: Source, at: string) => ({
   roastBatchId: s.rb?.id ?? null,
+  roastDeleted: !s.rb && s.batchNo !== "樣品",
   batchNo: s.batchNo,
   coffeeId: s.coffeeId,
   coffeeName: s.coffeeName,
   sampleRoastedDate: s.rb ? null : (s.roastedAt?.slice(0, 10) ?? null),
   restDays: s.roastedAt ? restDays(new Date(s.roastedAt), new Date(at)) : null,
 });
+
+/** 修改時的扣庫存：來源改成沒有熟豆庫存的（樣品或另一批）時，先沖銷原本的扣庫存 */
+async function syncLabStock(tx: Tx, cur: Doc, src: Source, o: { type: "CUPPING_USE" | "TASTING_USE"; qty: Num | null | undefined; note: string; actor: Actor }) {
+  if (src.rb?.invLotId) return syncStock(tx, cur, { ...o, lotId: src.rb.invLotId as string });
+  const old = cur.stockTxId ? await tx.get(C.txs, cur.stockTxId as string) : null;
+  if (old && !(await tx.get("invTxReversals", old.id))) await reverseTransaction(tx, old.id, o.actor, `${o.note} 改為沒有烘豆紀錄，沖銷原扣庫存`);
+  return null;
+}
 
 export interface CuppingInput extends BeanSource {
   templateId: string;
@@ -86,7 +109,7 @@ export interface CuppingInput extends BeanSource {
 
 async function cuppingFields(tx: Tx, src: Source, i: CuppingInput) {
   const tpl = await tx.must(C.cuppingTemplates, i.templateId, "評分模板");
-  if (src.roastedAt && new Date(i.cuppedAt) < new Date(src.roastedAt)) throw new DomainError("杯測時間不可早於烘焙時間");
+  timeWarn("杯測", i.cuppedAt, src.roastedAt);
   const attrs = tpl.attributes as Array<{ key: string; label: string }>;
   const scores = attrs
     .filter((a) => i.scores[a.key] != null && i.scores[a.key] !== "")
@@ -129,12 +152,12 @@ export async function createCupping(tx: Tx, i: CuppingInput, actor: Actor) {
   return s;
 }
 
-/** 修改杯測：烘焙批次不可變更；扣庫存數量變動時自動沖銷並重扣 */
-export async function updateCupping(tx: Tx, id: string, i: Omit<CuppingInput, "roastBatchId" | "coffeeId">, actor: Actor) {
+/** 修改杯測：可以改選烘焙批次或咖啡豆；扣庫存數量或來源變動時自動沖銷並重扣 */
+export async function updateCupping(tx: Tx, id: string, i: CuppingInput, actor: Actor) {
   const cur = await tx.must(C.cuppings, id, "杯測紀錄");
   const src = await beanSource(tx, i, cur);
   const fields = await cuppingFields(tx, src, i);
-  const stockTxId = src.rb?.invLotId ? await syncStock(tx, cur, { lotId: src.rb.invLotId as string, type: "CUPPING_USE", qty: i.deductStock ? i.consumedG : null, note: `杯測 ${id.slice(0, 8)}`, actor }) : null;
+  const stockTxId = await syncLabStock(tx, cur, src, { type: "CUPPING_USE", qty: i.deductStock ? i.consumedG : null, note: `杯測 ${id.slice(0, 8)}`, actor });
   tx.set(C.cuppings, id, { ...cur, ...fields, stockTxId, updatedAt: nowIso() });
   audit(tx, actor, "cupping.update", "CuppingSession", id, `修改杯測 ${src.batchNo}`);
 }
@@ -144,6 +167,7 @@ export async function deleteCupping(tx: Tx, id: string, actor: Actor) {
   const cur = await tx.must(C.cuppings, id, "杯測紀錄");
   const rb = cur.roastBatchId ? await tx.get(C.roastBatches, cur.roastBatchId as string) : null;
   if (rb) await syncStock(tx, cur, { lotId: rb.invLotId as string, type: "CUPPING_USE", qty: null, note: `杯測 ${id.slice(0, 8)}`, actor });
+  else await syncLabStock(tx, cur, { rb: null, coffeeId: "", coffeeName: "", batchNo: "", roastedAt: null }, { type: "CUPPING_USE", qty: null, note: `杯測 ${id.slice(0, 8)}`, actor });
   await tx.delete(C.cuppings, id);
   audit(tx, actor, "cupping.delete", "CuppingSession", id, `刪除杯測 ${cur.batchNo}（${String(cur.cuppedAt).slice(0, 10)}）`);
 }
@@ -177,16 +201,16 @@ export interface BrewInput extends BeanSource {
 }
 
 async function brewFields(tx: Tx, src: Source, i: BrewInput) {
-  if (src.roastedAt && new Date(i.brewedAt) < new Date(src.roastedAt)) throw new DomainError("沖煮時間不可早於烘焙時間");
+  timeWarn("沖煮", i.brewedAt, src.roastedAt);
   const dose = D(i.doseG);
   if (dose.lte(0)) throw new DomainError("粉量必須大於 0");
   let cum = D(0);
   const steps = i.pourSteps.map((s, idx) => {
     cum = cum.add(s.waterG);
-    if (s.startSec != null && s.endSec != null && s.endSec < s.startSec) throw new DomainError(`第 ${idx + 1} 段結束時間早於起始時間`);
+    if (s.startSec != null && s.endSec != null && s.endSec < s.startSec) warn(`第 ${idx + 1} 段結束時間早於起始時間，請確認`);
     return { stepNo: idx + 1, startSec: s.startSec ?? null, endSec: s.endSec ?? null, waterG: toDb(s.waterG, 2), cumulativeG: toDb(cum, 2), note: s.note ?? null };
   });
-  if (steps.length && !cum.eq(i.waterG)) throw new DomainError(`分段注水合計 ${cum}g 與總水量 ${i.waterG}g 不一致`);
+  if (steps.length && !cum.eq(i.waterG)) warn(`分段注水合計 ${cum}g 與總水量 ${i.waterG}g 不一致，請確認`);
   const name = async (id?: string | null) => (id ? ((await tx.get(C.equipment, id))?.name as string) ?? null : null);
   const recipe = i.recipeId ? await tx.get(C.brewRecipes, i.recipeId) : null;
   const tags = await upsertTags(tx, i.tags);
@@ -237,12 +261,12 @@ export async function createBrew(tx: Tx, i: BrewInput, actor: Actor) {
   return s;
 }
 
-/** 修改手沖：烘焙批次不可變更；有扣庫存時以新粉量沖銷重扣 */
-export async function updateBrew(tx: Tx, id: string, i: Omit<BrewInput, "roastBatchId" | "coffeeId">, actor: Actor) {
+/** 修改手沖：可以改選烘焙批次或咖啡豆；有扣庫存時以新粉量或新來源沖銷重扣 */
+export async function updateBrew(tx: Tx, id: string, i: BrewInput, actor: Actor) {
   const cur = await tx.must(C.brews, id, "沖煮紀錄");
   const src = await beanSource(tx, i, cur);
   const fields = await brewFields(tx, src, i);
-  const stockTxId = src.rb?.invLotId ? await syncStock(tx, cur, { lotId: src.rb.invLotId as string, type: "TASTING_USE", qty: i.deductStock ? i.doseG : null, note: `手沖試喝 ${id.slice(0, 8)}`, actor }) : null;
+  const stockTxId = await syncLabStock(tx, cur, src, { type: "TASTING_USE", qty: i.deductStock ? i.doseG : null, note: `手沖試喝 ${id.slice(0, 8)}`, actor });
   tx.set(C.brews, id, { ...cur, ...fields, stockTxId, updatedAt: nowIso() });
   audit(tx, actor, "brew.update", "BrewSession", id, `修改手沖 ${src.batchNo}`);
 }
@@ -252,6 +276,7 @@ export async function deleteBrew(tx: Tx, id: string, actor: Actor) {
   const cur = await tx.must(C.brews, id, "沖煮紀錄");
   const rb = cur.roastBatchId ? await tx.get(C.roastBatches, cur.roastBatchId as string) : null;
   if (rb) await syncStock(tx, cur, { lotId: rb.invLotId as string, type: "TASTING_USE", qty: null, note: `手沖試喝 ${id.slice(0, 8)}`, actor });
+  else await syncLabStock(tx, cur, { rb: null, coffeeId: "", coffeeName: "", batchNo: "", roastedAt: null }, { type: "TASTING_USE", qty: null, note: `手沖試喝 ${id.slice(0, 8)}`, actor });
   await tx.delete(C.brews, id);
   audit(tx, actor, "brew.delete", "BrewSession", id, `刪除手沖 ${cur.batchNo}（${String(cur.brewedAt).slice(0, 10)}）`);
 }

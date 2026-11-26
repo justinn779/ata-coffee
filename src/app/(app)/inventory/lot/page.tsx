@@ -62,7 +62,7 @@ export default function LotPage() {
                       <LinkButton href={`/green/new/?edit=${green.data.id}`} variant="secondary">
                         修改採購
                       </LinkButton>
-                      <DeleteButton inline={false} what="生豆採購" name={green.data.lotCode} id={green.data.id} op="green.delete" redirectTo="/green/" description="這批生豆的庫存會一起移除。已經烘焙過、或有盤點報廢等異動的批次不能刪除。" />
+                      <DeleteButton inline={false} what="生豆採購" name={green.data.lotCode} id={green.data.id} op="green.delete" redirectTo="/green/" description="這批生豆的庫存會一起移除。有其他紀錄用到時，會先提醒你確認。" />
                     </>
                   )}
                   {l.roastBatchId && (
