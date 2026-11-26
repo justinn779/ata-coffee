@@ -276,3 +276,25 @@ test("咖啡豆頁：各步驟集中一頁；不經烘豆直接記杯測 → 修
   await page.getByRole("dialog").getByRole("button", { name: "確認刪除" }).click();
   await expect(page.getByRole("row", { name: /樣品/ })).toHaveCount(0);
 });
+
+test("簡化：一頁建立商品與規格 → 從商品頁一步完成分裝", async ({ page }) => {
+  await page.goto("products/new/");
+  const name = `E2E 簡單商品 ${Date.now()}`;
+  await page.getByLabel("商品名稱").fill(name);
+  await page.locator('input[name="sizes.0.name"]').fill("100g");
+  await page.locator('input[name="sizes.0.fillWeightG"]').fill("10");
+  await page.locator('input[name="sizes.0.salePrice"]').fill("380");
+  await page.getByRole("button", { name: "建立商品" }).click();
+  await expect(page).toHaveURL(/\/products\/view\/\?id=/, { timeout: 60_000 });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
+  await page.getByRole("link", { name: "分裝", exact: true }).first().click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("分裝");
+  const lot = page.locator('select[name="sourceLotId"]');
+  await lot.selectOption({ index: 1 });
+  await page.getByLabel("裝了幾包").fill("1");
+  await page.getByRole("button", { name: "完成分裝" }).click();
+  const ask = page.getByRole("dialog", { name: "⚠ 提醒" });
+  if (await ask.isVisible({ timeout: 8_000 }).catch(() => false)) await ask.getByRole("button", { name: "仍要繼續" }).click();
+  await expect(page).toHaveURL(/\/production\/view\/\?id=/, { timeout: 60_000 });
+  await expect(page.getByText(/已完成/).first()).toBeVisible();
+});

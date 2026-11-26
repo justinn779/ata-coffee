@@ -15,17 +15,17 @@ export default function ProductsPage() {
   const avail = useAvailability();
   return (
     <>
-      <PageHeader title="商品與品項" description="Product 與 ProductVariant 分離；可售量 = 可用成品批次（在庫 − 保留）；套組依組件計算可組數量" actions={<LinkButton href="/products/new/">＋ 新增商品</LinkButton>} />
+      <PageHeader title="商品" description="每個商品可以有好幾種規格（例：100g、200g）；可售＝已分裝好、還沒被訂單保留的包數" actions={<LinkButton href="/products/new/">＋ 新增商品</LinkButton>} />
       <Guard loading={v.loading} error={v.error}>
         {() => (
           <DataTable
             columns={[
-              { key: "sku", label: "品項編號", sortable: true },
+              { key: "sku", label: "規格編號", sortable: true },
               { key: "name", label: "商品／規格" },
               { key: "cat", label: "分類", hideOnMobile: true },
               { key: "price", label: "售價", align: "right", sortable: true },
               { key: "avail", label: "可售", align: "right", sortable: true },
-              { key: "policy", label: "庫存政策", hideOnMobile: true },
+              { key: "policy", label: "庫存方式", hideOnMobile: true },
               { key: "status", label: "狀態" },
             ]}
             filters={[

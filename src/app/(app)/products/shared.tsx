@@ -17,6 +17,43 @@ export function useAvailability() {
   return map;
 }
 
+/** 簡單版新增商品：商品與規格一次建好 */
+export function QuickProductForm() {
+  const coffees = useCoffeeOptions();
+  const materials = useCol("materials", [], "code", false);
+  const mats = [{ value: "", label: "（不用）" }, ...materials.data.map((m) => ({ value: m.id, label: m.name }))];
+  return (
+    <EntityForm
+      key={`${coffees.length}-${materials.data.length}`}
+      draftKey="product-quick"
+      submitLabel="建立商品"
+      defaultValues={{ category: "COFFEE_BEAN", sizes: [{ name: "", fillWeightG: "", salePrice: "", materialId: "", materialId2: "" }] }}
+      sections={[{ key: "a", title: "商品" }, { key: "b", title: "要賣的規格", description: "每一種包裝大小一列，例如「100g」「200g」「濾掛 10 入」。包材選了，分裝時會自動扣袋子、標籤。" }]}
+      fields={[
+        { name: "name", label: "商品名稱", required: true, placeholder: "例：耶加雪菲 水洗", section: "a" },
+        { name: "coffeeId", label: "用哪支咖啡豆", type: "select", options: [{ value: "", label: "（不是咖啡豆商品）" }, ...coffees], section: "a" },
+        { name: "category", label: "分類", type: "select", required: true, options: opts(PRODUCT_CATEGORY), section: "a" },
+        {
+          name: "sizes",
+          label: "規格",
+          type: "array",
+          section: "b",
+          addLabel: "再加一種規格",
+          newItem: { name: "", fillWeightG: "", salePrice: "", materialId: "", materialId2: "" },
+          itemFields: [
+            { name: "name", label: "規格名稱", required: true, placeholder: "例：100g" },
+            { name: "fillWeightG", label: "每包重量", type: "number", unit: "g" },
+            { name: "salePrice", label: "售價", type: "number", unit: "TWD", required: true },
+            { name: "materialId", label: "包材 1（袋子）", type: "select", options: mats },
+            { name: "materialId2", label: "包材 2（標籤）", type: "select", options: mats },
+          ],
+        },
+      ]}
+      action={opAction("product.quickCreate", undefined, (d) => `/products/view/?id=${d.id}`)}
+    />
+  );
+}
+
 const PKEYS = ["id", "code", "name", "category", "brandSeriesId", "coffeeId", "flavorNotes", "description", "status", "isLimited", "saleStartDate", "saleEndDate"];
 
 export function ProductForm({ initial }: { initial?: Row }) {
@@ -60,26 +97,26 @@ export function VariantForm({ productId, initial }: { productId: string; initial
   return (
     <EntityForm
       key={`${materials.data.length}-${variants.length}`}
-      submitLabel={initial ? "儲存品項" : "建立品項"}
+      submitLabel={initial ? "儲存規格" : "建立規格"}
       defaultValues={{ productId, ...d }}
       sections={[
-        { key: "a", title: "規格與價格", description: "售價由伺服器端讀取，訂單成立後保存價格快照" },
-        { key: "b", title: "包材 BOM（單品）", description: "分裝完成時依此扣除包材" },
-        { key: "c", title: "套組組件", description: "套組不另存庫存，下單時直接保留組件成品，不會與單品重複承諾同一份庫存" },
+        { key: "a", title: "規格", description: "包裝大小、重量與售價" },
+        { key: "b", title: "包材", description: "每包要用的袋子、標籤；分裝時自動扣除" },
+        { key: "c", title: "進階設定（大多不用改）", description: "原價、庫存方式、套組／禮盒的組件" },
       ]}
       fields={[
         { name: "id", label: "", type: "hidden" },
         { name: "productId", label: "", type: "hidden" },
-        { name: "name", label: "規格名稱", required: true, placeholder: "例：200g 咖啡豆", section: "a" },
-        { name: "listPrice", label: "原價", type: "number", unit: "TWD", required: true, section: "a" },
+        { name: "name", label: "規格名稱", required: true, placeholder: "例：200g", section: "a" },
+        { name: "fillWeightG", label: "每包重量", type: "number", unit: "g", section: "a" },
         { name: "salePrice", label: "售價", type: "number", unit: "TWD", required: true, section: "a" },
-        { name: "standardCost", label: "估計成本", type: "number", unit: "TWD", section: "a", hint: "僅供參考；實際成本來自批次" },
-        { name: "fillWeightG", label: "每包填充重量", type: "number", unit: "g", section: "a" },
-        { name: "stockPolicy", label: "庫存政策", type: "select", required: true, options: opts(STOCK_POLICY), section: "a" },
         { name: "status", label: "狀態", type: "select", required: true, options: opts(PRODUCT_STATUS), section: "a" },
-        { name: "isBundle", label: "此品項 為套組／禮盒", type: "checkbox", section: "a" },
+        { name: "listPrice", label: "原價（留空＝售價）", type: "number", unit: "TWD", section: "c" },
+        { name: "standardCost", label: "估計成本", type: "number", unit: "TWD", section: "c", hint: "僅供參考；實際成本由分裝時計算" },
+        { name: "stockPolicy", label: "庫存方式", type: "select", required: true, options: opts(STOCK_POLICY), section: "c" },
+        { name: "isBundle", label: "這是套組／禮盒（由其他規格組成）", type: "checkbox", section: "c" },
         { name: "materials", label: "包材", type: "array", section: "b", addLabel: "新增包材", itemFields: [{ name: "materialId", label: "包材", type: "select", required: true, options: materials.data.map((m) => ({ value: m.id, label: `${m.code}｜${m.name}` })) }, { name: "quantityPerUnit", label: "每件用量", type: "number", required: true }] },
-        { name: "components", label: "組件", type: "array", section: "c", addLabel: "新增組件", itemFields: [{ name: "componentVariantId", label: "組件品項", type: "select", required: true, options: variants.filter((v) => v.value !== initial?.id) }, { name: "quantity", label: "數量", type: "number", required: true }] },
+        { name: "components", label: "組件", type: "array", section: "c", addLabel: "新增組件", itemFields: [{ name: "componentVariantId", label: "組件規格", type: "select", required: true, options: variants.filter((v) => v.value !== initial?.id) }, { name: "quantity", label: "數量", type: "number", required: true }] },
       ]}
       action={opAction("variant.save", undefined, () => `/products/view/?id=${productId}`)}
     />

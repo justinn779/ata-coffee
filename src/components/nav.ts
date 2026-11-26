@@ -39,10 +39,10 @@ export const MODULES: NavModule[] = [
   {
     key: "product",
     label: "商品與品牌",
-    desc: "商品品項、品牌系列、QR 履歷",
+    desc: "商品與規格、品牌系列、QR 履歷",
     icon: Tag,
     tabs: [
-      { href: "/products/", label: "商品與品項" },
+      { href: "/products/", label: "商品" },
       { href: "/series/", label: "品牌系列與履歷" },
     ],
   },

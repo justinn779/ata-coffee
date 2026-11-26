@@ -13,15 +13,15 @@ export default function ProductionPage() {
   const pos = useCol("productionOrders", [], "plannedDate");
   return (
     <>
-      <PageHeader title="分裝生產" description="建立時預留熟豆；完成時同一交易扣熟豆與包材、產出成品並計算成本。不同烘焙批次不混批。" actions={<LinkButton href="/production/new/">＋ 新增分裝單</LinkButton>} />
+      <PageHeader title="分裝紀錄" description="把熟豆裝成一包包商品的紀錄：扣熟豆與包材、產出成品，並算出每包成本。" actions={<LinkButton href="/production/new/">＋ 分裝</LinkButton>} />
       <Guard loading={pos.loading} error={pos.error}>
         {() => (
           <DataTable
             columns={[
-              { key: "no", label: "生產單", sortable: true },
+              { key: "no", label: "分裝單號", sortable: true },
               { key: "status", label: "狀態" },
               { key: "mode", label: "類型", hideOnMobile: true },
-              { key: "sku", label: "目標品項" },
+              { key: "sku", label: "商品規格" },
               { key: "src", label: "熟豆批次", hideOnMobile: true },
               { key: "qty", label: "數量（計畫／實際）", align: "right" },
               { key: "beans", label: "耗豆", align: "right", hideOnMobile: true },

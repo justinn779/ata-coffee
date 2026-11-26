@@ -470,6 +470,18 @@ export const OPS = {
 
   // ── 分裝 ──
   "production.create": op(z.object({ sourceLotId: docId("熟豆批次"), targetVariantId: docId("目標品項"), plannedQty: reqInt("預計生產數量"), fillWeightG: optDec("單包重量", { min: 0 }), plannedDate: isoDate("生產日期"), note: optStr() }), async (i, ctx) => ({ id: (await tx(ctx, (t) => createProductionOrder(t, { ...i, mode: "PRE_PACK" }, ctx.actor))).id })),
+  /** 一步完成分裝：選熟豆、規格、包數，直接扣熟豆與包材、產出成品（不用先建分裝單再完成） */
+  "production.quick": op(
+    z.object({ sourceLotId: docId("熟豆批次"), targetVariantId: docId("要裝成的商品規格"), qty: reqInt("包數"), fillWeightG: optDec("每包重量", { min: 0 }), lossG: optDec("損耗", { min: 0 }), packedDate: isoDate("分裝日期"), note: optStr() }),
+    async (i, ctx) => {
+      const r = await tx(ctx, async (t) => {
+        const po = await createProductionOrder(t, { sourceLotId: i.sourceLotId, targetVariantId: i.targetVariantId, plannedQty: i.qty, fillWeightG: i.fillWeightG, plannedDate: i.packedDate, note: i.note }, ctx.actor);
+        const done = await completeProductionOrder(t, po.id, { actualQty: i.qty, lossG: i.lossG, completedAt: new Date(`${i.packedDate}T12:00:00+08:00`).toISOString(), note: i.note, laborIsEstimate: true }, ctx.actor);
+        return { id: po.id, done };
+      });
+      return { id: r.id, message: `分裝完成 ${r.done.packagingBatch.batchNo}：${i.qty} 包，每包成本 NT$${r.done.unitCost.toFixed(2)}` };
+    },
+  ),
   "production.complete": op(
     z.object({ id: docId("生產單"), actualQty: reqInt("實際生產數量"), lossG: optDec("損耗", { min: 0 }), laborCost: optDec("包裝人工", { min: 0 }), qualityStatus: z.enum(["PASS", "HOLD", "FAIL"]).default("PASS"), expiryDate: optIsoDate(), note: optStr() }),
     async ({ id, ...i }, ctx) => {
@@ -495,7 +507,7 @@ export const OPS = {
       productId: docId("商品"),
       sku: optStr(60),
       name: reqStr("規格名稱"),
-      listPrice: reqDec("原價", { min: 0 }),
+      listPrice: optDec("原價", { min: 0 }),
       salePrice: reqDec("售價", { min: 0 }),
       standardCost: optDec("估計成本", { min: 0 }),
       fillWeightG: optDec("填充重量", { min: 0 }),
@@ -505,7 +517,25 @@ export const OPS = {
       materials: z.array(z.object({ materialId: docId("包材"), quantityPerUnit: reqDec("每件用量", { positive: true }) })).default([]),
       components: z.array(z.object({ componentVariantId: docId("組件"), quantity: reqDec("數量", { positive: true }) })).default([]),
     }),
-    (i, ctx) => tx(ctx, (t) => saveVariant(t, i, ctx.actor)),
+    (i, ctx) => tx(ctx, (t) => saveVariant(t, { ...i, listPrice: i.listPrice ?? i.salePrice }, ctx.actor)),
+  ),
+  /** 簡單版新增商品：商品與各規格（例：100g、200g）一次建好；其他設定用預設值（上架、現貨、原價＝售價） */
+  "product.quickCreate": op(
+    z.object({
+      name: reqStr("商品名稱"),
+      category: z.enum(["COFFEE_BEAN", "DRIP_BAG", "DRIP_BAG_SET", "GIFT_BOX", "MERCH", "OTHER"]).default("COFFEE_BEAN"),
+      coffeeId: optDocId(),
+      sizes: z.array(z.object({ name: reqStr("規格名稱", 100), fillWeightG: optDec("每包重量", { min: 0 }), salePrice: reqDec("售價", { min: 0 }), materialId: optDocId(), materialId2: optDocId() })).min(1, "至少要有一種規格"),
+    }),
+    (i, ctx) =>
+      tx(ctx, async (t) => {
+        const p = await saveProduct(t, { name: i.name, category: i.category, coffeeId: i.coffeeId ?? null, status: "ACTIVE", isLimited: false }, ctx.actor);
+        for (const sz of i.sizes) {
+          const mats = [sz.materialId, sz.materialId2].filter((m): m is string => !!m).map((materialId) => ({ materialId, quantityPerUnit: "1" }));
+          await saveVariant(t, { productId: p.id, name: sz.name, listPrice: sz.salePrice, salePrice: sz.salePrice, fillWeightG: sz.fillWeightG ?? null, isBundle: false, stockPolicy: "STOCK_ONLY", status: "ACTIVE", materials: mats, components: [] }, ctx.actor);
+        }
+        return { id: p.id, message: `已建立商品「${i.name}」與 ${i.sizes.length} 種規格` };
+      }),
   ),
 
   // ── 訂單 ──

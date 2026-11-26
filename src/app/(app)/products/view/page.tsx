@@ -27,10 +27,10 @@ export default function ProductDetail() {
             <PageHeader
               title={x.name}
               description={`${x.code} · ${PRODUCT_CATEGORY[x.category]}`}
-              back={{ href: "/products/", label: "商品與品項" }}
+              back={{ href: "/products/", label: "商品" }}
               actions={
                 <>
-                  <LinkButton href={`/products/variant/?product=${x.id}`}>＋ 新增品項</LinkButton>
+                  <LinkButton href={`/products/variant/?product=${x.id}`}>＋ 新增規格</LinkButton>
                   <LinkButton href={`/products/edit/?id=${x.id}`} variant="outline">
                     編輯商品
                   </LinkButton>
@@ -57,7 +57,7 @@ export default function ProductDetail() {
               </Card>
               {variants.data.map((v) => (
                 <Card key={v.id}>
-                  <CardHeader title={<span>{v.sku}｜{v.name} {v.isBundle && <Badge tone="info">套組</Badge>}</span>} description={STOCK_POLICY[v.stockPolicy]} action={<span className="flex items-center gap-1"><A href={`/products/variant/?product=${x.id}&id=${v.id}`}>編輯</A><DeleteButton what="品項" name={v.sku} col="variants" id={v.id} description="有其他紀錄用到時，會先提醒你確認。" /></span>} />
+                  <CardHeader title={<span>{v.sku}｜{v.name} {v.isBundle && <Badge tone="info">套組</Badge>}</span>} description={STOCK_POLICY[v.stockPolicy]} action={<span className="flex items-center gap-1">{!v.isBundle && <A href={`/production/new/?variant=${v.id}`}>分裝</A>}<A href={`/products/variant/?product=${x.id}&id=${v.id}`}>編輯</A><DeleteButton what="品項" name={v.sku} col="variants" id={v.id} description="有其他紀錄用到時，會先提醒你確認。" /></span>} />
                   <CardBody className="space-y-4">
                     <KV
                       cols={4}
@@ -66,8 +66,8 @@ export default function ProductDetail() {
                         ["估計成本", fmtMoney2(v.standardCost)],
                         ["估計毛利", v.standardCost ? `${fmtMoney(D(v.salePrice).sub(v.standardCost))}（${fmtNum(D(v.salePrice).sub(v.standardCost).div(v.salePrice).mul(100), 1)}%）` : "—"],
                         ["可售", v.stockPolicy === "NOT_TRACKED" ? "不追蹤" : `${fmtNum(avail.get(v.id) ?? 0, 0)} 件${v.isBundle ? "（可組數量）" : ""}`],
-                        ["填充重量", v.fillWeightG ? `${fmtNum(v.fillWeightG, 2)} g` : "—"],
-                        ["包材 BOM", ((v.materials as Row[]) ?? []).map((m) => `${m.materialName} × ${fmtNum(m.quantityPerUnit, 2)}`).join("、") || "—"],
+                        ["每包重量", v.fillWeightG ? `${fmtNum(v.fillWeightG, 2)} g` : "—"],
+                        ["包材", ((v.materials as Row[]) ?? []).map((m) => `${m.materialName} × ${fmtNum(m.quantityPerUnit, 2)}`).join("、") || "—"],
                         ...(v.isBundle ? [["組件", ((v.bundleComponents as Row[]) ?? []).map((c) => `${c.sku} × ${c.quantity}`).join("、")] as [string, string]] : []),
                       ]}
                     />

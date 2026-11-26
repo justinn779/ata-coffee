@@ -19,7 +19,7 @@ const QUICK: Array<[string, typeof Bean, string, string]> = [
   ["/roasting/live/", Flame, "烘豆", "平板烘豆即時紀錄"],
   ["/cupping/new/", FlaskConical, "杯測", "新增杯測"],
   ["/brewing/new/", Coffee, "手沖", "新增手沖紀錄"],
-  ["/production/new/", Package, "分裝", "新增分裝單"],
+  ["/production/new/", Package, "分裝", "熟豆裝成商品"],
   ["/orders/new/", ShoppingBag, "訂單", "新增手動訂單"],
 ];
 

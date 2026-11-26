@@ -160,7 +160,7 @@ export default function CoffeeHub() {
           pack: {
             title: "分裝",
             add: <LinkButton size="sm" href={go(`/production/new/?coffee=${x.id}`)}>＋ 分裝</LinkButton>,
-            head: ["分裝單", "日期", "品項", "數量", "狀態", ""],
+            head: ["分裝單", "日期", "商品規格", "數量", "狀態", ""],
             rows: [...myPos]
               .sort((a, b) => String(b.plannedDate).localeCompare(String(a.plannedDate)))
               .map((p) => [
