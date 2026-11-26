@@ -10,7 +10,6 @@ export function CoffeeForm({ initial }: { initial?: Row }) {
   const suppliers = useCol("suppliers", [], "code", false);
   const fields: FieldDef[] = [
     { name: "id", label: "", type: "hidden" },
-    { name: "code", label: "代碼", required: true, placeholder: "例：ETH-YRG-W", section: "basic" },
     { name: "nameZh", label: "中文名稱", required: true, section: "basic" },
     { name: "nameEn", label: "英文名稱", section: "basic" },
     { name: "brandName", label: "品牌商品名稱", section: "basic" },

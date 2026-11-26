@@ -31,7 +31,6 @@ export function ProductForm({ initial }: { initial?: Row }) {
       sections={[{ key: "a", title: "商品資料" }, { key: "b", title: "販售設定" }]}
       fields={[
         { name: "id", label: "", type: "hidden" },
-        { name: "code", label: "商品編號", required: true, section: "a" },
         { name: "name", label: "名稱", required: true, section: "a" },
         { name: "category", label: "分類", type: "select", required: true, options: opts(PRODUCT_CATEGORY), section: "a" },
         { name: "brandSeriesId", label: "品牌系列", type: "select", options: series.data.map((s) => ({ value: s.id, label: `${s.code} ${s.name}` })), section: "a" },
@@ -71,7 +70,6 @@ export function VariantForm({ productId, initial }: { productId: string; initial
       fields={[
         { name: "id", label: "", type: "hidden" },
         { name: "productId", label: "", type: "hidden" },
-        { name: "sku", label: "品項編號", required: true, section: "a" },
         { name: "name", label: "規格名稱", required: true, placeholder: "例：200g 咖啡豆", section: "a" },
         { name: "listPrice", label: "原價", type: "number", unit: "TWD", required: true, section: "a" },
         { name: "salePrice", label: "售價", type: "number", unit: "TWD", required: true, section: "a" },

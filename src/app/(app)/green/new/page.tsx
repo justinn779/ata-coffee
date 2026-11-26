@@ -65,7 +65,6 @@ export default function NewGreenPage() {
             { name: "purchaseDate", label: "採購日期", type: "date", required: true, section: "a" },
             { name: "receivedAt", label: "入庫時間", type: "datetime", required: true, section: "a" },
             { name: "invoiceNo", label: "發票／單據號碼", section: "a" },
-            { name: "lotCode", label: "批次編號", hint: "留空則自動產生（GB-日期-序號）", section: "a" },
             { name: "purchasedWeightG", label: "採購數量", type: "number", unit: "g", required: true, section: "b" },
             { name: "receivedWeightG", label: "實際入庫數量", type: "number", unit: "g", required: true, hint: "實際秤重，作為庫存與成本分母", section: "b" },
             { name: "unitPricePerKg", label: "單價（每公斤）", type: "number", unit: "TWD", required: true, section: "b" },

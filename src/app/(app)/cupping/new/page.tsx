@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { fmtDateTime, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument } from "@/lib/data";
-import { Guard, useCoffeeOptions, useQS, useRoastBatchOptions } from "@/lib/page";
+import { Guard, Loading, useCoffeeOptions, useQS, useRoastBatchOptions } from "@/lib/page";
 import { SourceSwitch, sampleMode } from "@/components/bean-source";
 import { EntityForm, type FieldDef } from "@/components/entity-form";
 import { Notice, PageHeader } from "@/components/ui";
@@ -38,6 +38,8 @@ export default function NewCuppingPage() {
         if (!tpl) return <Notice tone="warning">{x ? "此杯測使用的評分模板已不存在，無法修改。" : "請先於系統設定建立杯測評分模板。"}</Notice>;
         const attrs = tpl.attributes as Array<{ key: string; label: string }>;
         const sample = x && !sp.get("sample") ? !x.roastBatchId : sampleMode(sp, roast, roasts.length);
+        // 修改時等選單載入完再顯示表單，避免選單晚到時表單重新載入、清掉剛填的內容
+        if (x && (sample ? coffees.length === 0 : roasts.length === 0)) return <Loading />;
         const fields: FieldDef[] = [
           sample
             ? { name: "coffeeId", label: "咖啡豆", type: "select", required: true, options: coffees, section: "a", wide: true }
@@ -96,7 +98,7 @@ export default function NewCuppingPage() {
               </p>
             )}
             <EntityForm
-              key={x ? `edit-${x.id}-${legacy.data.length}-${sample}-${roasts.length}-${coffees.length}` : `${tpl.id}-${roasts.length}-${coffees.length}-${sample}`}
+              key={x ? `edit-${x.id}-${legacy.data.length}-${sample}` : `${tpl.id}-${roasts.length}-${coffees.length}-${sample}`}
               draftKey={x ? undefined : `cupping-new-${tpl.id}${sample ? "-sample" : ""}`}
               submitLabel={x ? "儲存修改" : "儲存杯測"}
               defaultValues={defaults}

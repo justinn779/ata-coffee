@@ -69,11 +69,11 @@ test("錯誤曲線檔顯示具體行號", async ({ page }) => {
   await expect(page.getByRole("alert").filter({ hasText: /第 4 行/ })).toBeVisible({ timeout: 60_000 });
 });
 
-test("新增咖啡豆表單：必填驗證與建立", async ({ page }) => {
+test("新增咖啡豆表單：必填驗證與建立（編號自動產生）", async ({ page }) => {
   await page.goto("coffees/new/");
+  await expect(page.getByLabel("代碼")).toHaveCount(0);
   await page.getByRole("button", { name: "建立咖啡豆" }).click();
-  await expect(page.getByText("請填寫代碼").first()).toBeVisible();
-  await page.getByLabel("代碼").fill(`E2E-${Date.now()}`);
+  await expect(page.getByText("請填寫中文名稱").first()).toBeVisible();
   await page.getByLabel("中文名稱").fill("E2E 測試豆");
   await page.getByRole("button", { name: "建立咖啡豆" }).click();
   await expect(page).toHaveURL(/\/coffees\/view\/\?id=/, { timeout: 60_000 });

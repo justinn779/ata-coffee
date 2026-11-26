@@ -15,7 +15,6 @@ export function SeriesForm({ initial }: { initial?: Row }) {
       defaultValues={{ character: "NONE", ...formDefaults(initial, ["id", "code", "name", "character", "launchDate", "recommendedRecipeId", "isLimited", "flavorNotes", "story"]) }}
       fields={[
         { name: "id", label: "", type: "hidden" },
-        { name: "code", label: "系列編號", required: true, placeholder: "例：ATA 003" },
         { name: "name", label: "系列名稱", required: true },
         { name: "character", label: "角色", type: "select", required: true, options: opts(SERIES_CHARACTER) },
         { name: "launchDate", label: "上市時間", type: "date" },

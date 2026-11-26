@@ -83,7 +83,7 @@ const tx = <T>(ctx: OpCtx, fn: Parameters<typeof runTx<T>>[1]) => runTx(ctx.db, 
 
 const coffeeSchema = z.object({
   id: optDocId(),
-  code: reqStr("代碼", 40),
+  code: optStr(40),
   nameZh: reqStr("中文名稱"),
   nameEn: optStr(200),
   brandName: optStr(200),
@@ -486,14 +486,14 @@ export const OPS = {
 
   // ── 商品 ──
   "product.save": op(
-    z.object({ id: optDocId(), code: reqStr("商品編號", 40), name: reqStr("商品名稱"), category: z.enum(["COFFEE_BEAN", "DRIP_BAG", "DRIP_BAG_SET", "GIFT_BOX", "MERCH", "OTHER"]), brandSeriesId: optDocId(), coffeeId: optDocId(), description: optStr(), flavorNotes: optStr(), status: z.enum(["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"]), isLimited: bool(), saleStartDate: optIsoDate(), saleEndDate: optIsoDate() }),
+    z.object({ id: optDocId(), code: optStr(40), name: reqStr("商品名稱"), category: z.enum(["COFFEE_BEAN", "DRIP_BAG", "DRIP_BAG_SET", "GIFT_BOX", "MERCH", "OTHER"]), brandSeriesId: optDocId(), coffeeId: optDocId(), description: optStr(), flavorNotes: optStr(), status: z.enum(["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"]), isLimited: bool(), saleStartDate: optIsoDate(), saleEndDate: optIsoDate() }),
     (i, ctx) => tx(ctx, (t) => saveProduct(t, i, ctx.actor)),
   ),
   "variant.save": op(
     z.object({
       id: optDocId(),
       productId: docId("商品"),
-      sku: reqStr("品項編號", 60),
+      sku: optStr(60),
       name: reqStr("規格名稱"),
       listPrice: reqDec("原價", { min: 0 }),
       salePrice: reqDec("售價", { min: 0 }),
@@ -599,12 +599,12 @@ export const OPS = {
   "cost.addRule": op(z.object({ name: reqStr("規則名稱", 100), category: reqStr("類別", 40), method: z.enum(["PER_BATCH", "PER_KG_GREEN", "PER_UNIT", "PERCENT_OF_REVENUE"]), rate: reqDec("費率", { min: 0 }), description: optStr(500) }), (i, ctx) => tx(ctx, (t) => upsert(t, C.costRules, null, { ...i, isActive: true }, ctx.actor, { label: "成本分攤規則" })).then(() => ({ message: "已新增成本分攤規則" }))),
 
   // ── 品牌與履歷 ──
-  "series.save": op(z.object({ id: optDocId(), code: reqStr("系列編號", 40), name: reqStr("系列名稱", 100), story: optStr(), flavorNotes: optStr(), character: z.enum(["NONE", "ATI", "ATO", "BOTH"]), isLimited: bool(), launchDate: optIsoDate(), recommendedRecipeId: optDocId() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.series, id, d, ctx.actor, { unique: "code", label: "品牌系列" }))),
+  "series.save": op(z.object({ id: optDocId(), code: optStr(40), name: reqStr("系列名稱", 100), story: optStr(), flavorNotes: optStr(), character: z.enum(["NONE", "ATI", "ATO", "BOTH"]), isLimited: bool(), launchDate: optIsoDate(), recommendedRecipeId: optDocId() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.series, id, d, ctx.actor, { unique: "code", label: "品牌系列" }))),
   "trace.setPublished": op(z.object({ id: docId("履歷"), publish: z.boolean(), recommendedBrew: optStr(300) }), (i, ctx) => tx(ctx, (t) => setTracePublished(t, i.id, i.publish, i.recommendedBrew, ctx.actor))),
   "brand.register": op(z.object({ kind: z.enum(["LOGO", "MASCOT_ATI", "MASCOT_ATO", "PACKAGING", "OTHER"]), name: reqStr("名稱", 100), storagePath: reqStr("檔案", 500), isOfficial: z.boolean(), note: optStr(500) }), (i, ctx) => tx(ctx, (t) => upsert(t, C.brandAssets, null, i, ctx.actor, { label: "品牌素材" })).then(() => ({ message: "已上傳" }))),
 
   // ── 主檔設定 ──
-  "supplier.save": op(z.object({ id: optDocId(), code: reqStr("代碼", 40), name: reqStr("名稱"), contact: optStr(100), phone: optStr(50), email: optStr(200), country: optStr(100), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.suppliers, id, { ...d, isActive: true }, ctx.actor, { unique: "code", label: "供應商" }))),
+  "supplier.save": op(z.object({ id: optDocId(), code: optStr(40), name: reqStr("名稱"), contact: optStr(100), phone: optStr(50), email: optStr(200), country: optStr(100), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.suppliers, id, { ...d, isActive: true }, ctx.actor, { unique: "code", label: "供應商" }))),
   "roaster.save": op(
     z.object({ id: optDocId(), name: reqStr("名稱"), brand: reqStr("品牌"), model: reqStr("型號"), maxCapacityG: optDec("最大容量", { min: 0 }), tempChannels: optStr(200), heatControl: optStr(200), airflowControl: optStr(200), drumSpeedControl: optStr(200), sensorNote: optStr(500), note: optStr() }),
     ({ id, tempChannels, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.roasters, id, { ...d, tempChannels: (tempChannels ?? "").split(/[,，\s]+/).filter(Boolean), isActive: true }, ctx.actor, { unique: "name", label: "烘豆機" })),
@@ -634,8 +634,8 @@ export const OPS = {
       return { message: "已更新評分模板" };
     }),
   ),
-  "material.save": op(z.object({ id: optDocId(), code: reqStr("代碼", 40), name: reqStr("名稱"), category: z.enum(["BAG", "LABEL", "DRIP_BAG", "BOX", "SEAL", "OTHER"]), spec: optStr(200), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.materials, id, { ...d, isActive: true }, ctx.actor, { unique: "code", label: "包材" }))),
-  "location.save": op(z.object({ id: optDocId(), code: reqStr("代碼", 40), name: reqStr("名稱"), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.locations, id, d, ctx.actor, { unique: "code", label: "儲位" }))),
+  "material.save": op(z.object({ id: optDocId(), code: optStr(40), name: reqStr("名稱"), category: z.enum(["BAG", "LABEL", "DRIP_BAG", "BOX", "SEAL", "OTHER"]), spec: optStr(200), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.materials, id, { ...d, isActive: true }, ctx.actor, { unique: "code", label: "包材" }))),
+  "location.save": op(z.object({ id: optDocId(), code: optStr(40), name: reqStr("名稱"), note: optStr() }), ({ id, ...d }, ctx) => tx(ctx, (t) => upsert(t, C.locations, id, d, ctx.actor, { unique: "code", label: "儲位" }))),
   "settings.save": op(
     z.object({ taxMode: z.enum(["INCLUSIVE", "EXCLUSIVE", "NONE"]), taxRate: reqDec("稅率", { min: 0 }), requirePaymentBeforeShip: z.enum(["true", "false"]), lowGreenG: reqDec("生豆預警", { min: 0 }), lowRoastedG: reqDec("熟豆預警", { min: 0 }), lowFinishedPcs: reqDec("成品預警", { min: 0 }), expiryWarnDays: reqDec("到期提醒天數", { min: 0 }) }),
     (i, ctx) =>

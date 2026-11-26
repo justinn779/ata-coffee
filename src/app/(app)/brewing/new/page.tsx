@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { fmtSec, nowTaipeiLocal, toTaipeiLocalInput } from "@/lib/time";
 import { opAction } from "@/lib/api";
 import { useCol, useDocument, type Row } from "@/lib/data";
-import { Guard, useCoffeeOptions, useEquipmentOptions, useQS, useRoastBatchOptions } from "@/lib/page";
+import { Guard, Loading, useCoffeeOptions, useEquipmentOptions, useQS, useRoastBatchOptions } from "@/lib/page";
 import { SourceSwitch, sampleMode } from "@/components/bean-source";
 import { EntityForm } from "@/components/entity-form";
 import { PageHeader } from "@/components/ui";
@@ -34,6 +34,8 @@ export default function NewBrewPage() {
         const edit = editId ? src.data : null;
         const base: Row | null = src.data ?? recipe.data;
         const sample = edit && !sp.get("sample") ? !edit.roastBatchId : copy && src.data ? !src.data.roastBatchId && !roast : sampleMode(sp, roast, roasts.length);
+        // 修改時等來源選單載入完再顯示表單，避免選單晚到時表單重新載入
+        if (edit && (sample ? coffees.length === 0 : roasts.length === 0)) return <Loading />;
         const plan = src.data ? (src.data.pourSteps as Row[]) : ((recipe.data?.pourPlan as Row[]) ?? []);
         const defaults = {
           roastBatchId: roast ?? s(src.data?.roastBatchId),

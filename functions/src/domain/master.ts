@@ -11,10 +11,33 @@ import { createLot, ensureMaterialItem, ensureVariantItem, post } from "./invent
 
 type Data = Record<string, unknown>;
 
-/** 通用新增／更新：處理唯一欄位（code、sku…）與稽核 */
+/** 系統自動產生的編號前綴（新增時沒填編號就自動產生，例如 CF-001） */
+export const AUTO_CODE: Record<string, string> = {
+  [C.coffees]: "CF",
+  [C.products]: "P",
+  [C.variants]: "SKU",
+  [C.series]: "S",
+  [C.suppliers]: "SUP",
+  [C.materials]: "M",
+  [C.locations]: "L",
+};
+
+/** 產生下一個沒被用過的編號（略過以前手動取過的同名編號） */
+async function nextFreeCode(tx: Tx, col: string, field: string, prefix: string) {
+  for (let i = 0; i < 200; i++) {
+    const code = await nextNumber(tx, prefix, { daily: false, pad: 3 });
+    if (!(await tx.get("uniq", `${col}.${field}:${code}`.replace(/\//g, "∕")))) return code;
+  }
+  throw new DomainError("無法自動產生編號，請稍後再試");
+}
+
+/** 通用新增／更新：處理唯一欄位（code、sku…）與稽核；編號沒填時新增自動產生、修改沿用原本的 */
 export async function upsert(tx: Tx, col: string, id: string | null | undefined, data: Data, actor: Actor, opts: { unique?: string; label: string }): Promise<Doc> {
   const now = nowIso();
   const before = id ? { ...(await tx.must(col, id, opts.label)) } : null;
+  if (opts.unique && (data[opts.unique] == null || String(data[opts.unique]).trim() === "") && AUTO_CODE[col]) {
+    data = { ...data, [opts.unique]: before ? before[opts.unique] : await nextFreeCode(tx, col, opts.unique, AUTO_CODE[col]) };
+  }
   if (opts.unique) {
     const val = String(data[opts.unique]);
     if (id) {
