@@ -152,9 +152,25 @@ export const DELETABLE: Record<string, DeletableDef> = {
   },
   [C.customers]: { label: "顧客", refs: [{ col: C.orders, field: "customerId", label: "訂單" }] },
   [C.series]: { label: "品牌系列", unique: "code", refs: [{ col: C.products, field: "brandSeriesId", label: "商品" }] },
-  [C.products]: { label: "商品", refs: [{ col: C.variants, field: "productId", label: "品項（請先刪除品項）" }] },
+  [C.products]: {
+    label: "商品",
+    unique: "code",
+    refs: [],
+    // 規格會跟商品一起刪除；有訂單、分裝或庫存用到的規格，提醒後照樣刪（那些紀錄保留）
+    extra: async (tx, d) => {
+      const out: string[] = [];
+      for (const v of await tx.query(C.variants, [["productId", "==", d.id]])) {
+        const used = await variantUsage(tx, v);
+        out.push(`規格「${v.name}」（會一起刪除${used.length ? `；已有${used.join("、")}` : ""}）`);
+      }
+      return out;
+    },
+    cleanup: async (tx, d) => {
+      for (const v of await tx.query(C.variants, [["productId", "==", d.id]])) await removeVariant(tx, v);
+    },
+  },
   [C.variants]: {
-    label: "商品品項",
+    label: "商品規格",
     unique: "sku",
     refs: [
       { col: C.orderItems, field: "variantId", label: "訂單明細" },
@@ -209,6 +225,33 @@ export const DELETABLE: Record<string, DeletableDef> = {
   [C.costRules]: { label: "成本分攤規則", refs: [] },
 };
 
+/** 規格被哪些紀錄用到（訂單、分裝、成品庫存、套組） */
+async function variantUsage(tx: Tx, v: Doc) {
+  const out: string[] = [];
+  if ((await tx.query(C.orderItems, [["variantId", "==", v.id]], { limit: 1 })).length) out.push("訂單");
+  if ((await tx.query(C.productionOrders, [["targetVariantId", "==", v.id]], { limit: 1 })).length) out.push("分裝紀錄");
+  if (await hasStock(tx, `variant-${v.id}`)) out.push("成品庫存");
+  return out;
+}
+
+/** 刪除一個規格（釋放規格編號；沒有庫存批次時一併刪除庫存品項） */
+export async function removeVariant(tx: Tx, v: Doc) {
+  await DELETABLE[C.variants].cleanup?.(tx, v);
+  if (v.sku != null) await tx.releaseUnique(`${C.variants}.sku`, String(v.sku));
+  await tx.delete(C.variants, v.id);
+}
+
+/** 清除商品已被刪除、卻還留著的規格 */
+export async function cleanOrphanVariants(tx: Tx, actor: Actor) {
+  const orphans: Doc[] = [];
+  for (const v of await tx.query(C.variants, [])) if (!v.productId || !(await tx.get(C.products, v.productId as string))) orphans.push(v);
+  if (!orphans.length) return 0;
+  confirmOr(`要清除 ${orphans.length} 個商品已刪除的規格（${orphans.map((v) => `${v.productName ?? ""}｜${v.name}`).join("、")}）。用到它們的訂單、分裝紀錄會保留。確定清除嗎？`);
+  for (const v of orphans) await removeVariant(tx, v);
+  audit(tx, actor, "variants.cleanOrphans", "ProductVariant", null, `清除 ${orphans.length} 個商品已刪除的規格`);
+  return orphans.length;
+}
+
 /** 刪除主檔：先檢查是否仍被使用 */
 export async function deleteMaster(tx: Tx, col: string, id: string, actor: Actor) {
   const def = DELETABLE[col];
@@ -220,7 +263,9 @@ export async function deleteMaster(tx: Tx, col: string, id: string, actor: Actor
     if (n) used.set(r.label, (used.get(r.label) ?? 0) + n);
   }
   for (const x of (await def.extra?.(tx, d)) ?? []) used.set(x, (used.get(x) ?? 0) + 1);
-  if (used.size) {
+  if (col === C.products && used.size) {
+    confirmOr(`商品「${d.name}」底下的規格會一起刪除：${[...used.keys()].join("、")}。用到這些規格的訂單、分裝紀錄、庫存會保留。確定刪除嗎？`);
+  } else if (used.size) {
     const list = [...used].map(([k, n]) => `${k} ${n} 筆`).join("、");
     confirmOr(`這筆${def.label}還有 ${list} 用到。刪除後那些紀錄會保留，並標示「${def.label}已刪除」${col === C.coffees ? "（也可以改用「封存」）" : ""}。確定刪除嗎？`);
   }

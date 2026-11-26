@@ -18,7 +18,7 @@ import { cancelProductionOrder, completeProductionOrder, createProductionOrder ,
 import { addOrderCost, cancelOrder, completeOrder, confirmPayment, createOrder, createReturn, inspectReturnItem, markPaymentPending, recordRefund, shipOrder, updateOrder , deleteOrder } from "./domain/orders";
 import { createBrew, createCupping, deleteBrew, deleteCupping, saveRecipeFromBrew, updateBrew, updateCupping } from "./domain/lab";
 import { lossStats, monthlyReport, skuPerformance } from "./domain/reports";
-import { DELETABLE, deleteCostEntry, deleteMaster } from "./domain/cascade";
+import { cleanOrphanVariants, DELETABLE, deleteCostEntry, deleteMaster } from "./domain/cascade";
 import { refreshPublishedTraces, setTracePublished, traceOrder } from "./domain/traceability";
 import { addExperiment, createApiKey, deleteExperiment, deleteResearch, updateExperiment, receiveMaterial, saveProduct, saveVariant, setBaseline, setLotStatus, upsert } from "./domain/master";
 import { saveCurve, sha256 } from "./domain/curves";
@@ -520,6 +520,10 @@ export const OPS = {
     (i, ctx) => tx(ctx, (t) => saveVariant(t, { ...i, listPrice: i.listPrice ?? i.salePrice }, ctx.actor)),
   ),
   /** 簡單版新增商品：商品與各規格（例：100g、200g）一次建好；其他設定用預設值（上架、現貨、原價＝售價） */
+  "variant.cleanOrphans": op(z.object({}), async (_i, ctx) => {
+    const n = await tx(ctx, (t) => cleanOrphanVariants(t, ctx.actor));
+    return { message: n ? `已清除 ${n} 個殘留的規格` : "沒有需要清除的規格" };
+  }),
   "product.quickCreate": op(
     z.object({
       name: reqStr("商品名稱"),

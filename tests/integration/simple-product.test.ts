@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { C } from "../../functions/src/types";
-import { baseFixture, docs, expectReconciled, lotOf, n, op, receiveGreen, resetDb, roast } from "../helpers";
+import { baseFixture, db, docs, expectReconciled, lotOf, n, op, receiveGreen, resetDb, roast } from "../helpers";
 
 beforeEach(async () => {
   await resetDb();
@@ -47,5 +47,34 @@ describe("簡化的商品與分裝", () => {
     expect(n((await lotOf(f.bagLotId)).onHand)).toBe(47);
     expect(String(po.completedAt).slice(0, 10)).toBe("2026-11-20");
     await expectReconciled();
+  });
+});
+
+describe("刪除商品", () => {
+  it("規格一起刪除；有訂單用過的規格先提醒，確認後刪除、訂單保留", async () => {
+    const f = await baseFixture();
+    const g = await receiveGreen(f.coffee.id);
+    const rb = await roast(g.id, f.roaster.id, 500, 425);
+    await op("production.quick", { sourceLotId: rb.roastedLotId, targetVariantId: f.v100.id, qty: "2", packedDate: "2026-11-20" });
+    await op("order.create", { customerName: "測試顧客", items: [{ variantId: f.v100.id, quantity: "1" }] });
+    await expect(op("master.delete", { col: C.products, id: f.product.id })).rejects.toThrow(/規格會一起刪除/);
+    await op("master.delete", { col: C.products, id: f.product.id, force: true });
+    expect(await docs(C.products)).toHaveLength(0);
+    expect(await docs(C.variants)).toHaveLength(0);
+    expect(await docs(C.orderItems)).toHaveLength(1);
+    // 規格編號釋放後可以再用
+    const p = await op<{ id: string }>("product.quickCreate", { name: "新商品", sizes: [{ name: "100g", salePrice: "1" }] });
+    expect(await docs(C.variants, "productId", p.id)).toHaveLength(1);
+    await expectReconciled();
+  });
+
+  it("清除舊版留下的殘留規格", async () => {
+    const f = await baseFixture();
+    await db.collection(C.products).doc(f.product.id).delete();
+    await expect(op("variant.cleanOrphans", {})).rejects.toThrow(/商品已刪除的規格/);
+    const r = await op<{ message: string }>("variant.cleanOrphans", { force: true });
+    expect(r.message).toMatch(/已清除 2 個/);
+    expect(await docs(C.variants)).toHaveLength(0);
+    expect((await op<{ message: string }>("variant.cleanOrphans", {})).message).toMatch(/沒有需要清除/);
   });
 });
