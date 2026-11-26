@@ -220,7 +220,7 @@ function Footer() {
           <p className="leading-relaxed">
             {b?.name || "業者名稱（待補）"}
             {b?.taxId ? `｜統一編號 ${b.taxId}` : ""}
-            {b?.foodRegNo ? `｜食品業者登錄字號 ${b.foodRegNo}` : "｜食品業者登錄字號（待補）"}
+            {b?.foodRegNo ? `｜食品業者登錄字號 ${b.foodRegNo}` : ""}
             <br />
             {b?.address || "營業地址（待補）"}
             {s?.service.phone ? `｜${s.service.phone}` : ""}

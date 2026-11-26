@@ -10,7 +10,7 @@ export interface StoreSettings {
   open: boolean;
   maintenance: boolean;
   maintenanceMessage: string;
-  bank: { bankName: string; bankCode: string; branch: string; accountNo: string; accountName: string; isDemo: boolean };
+  bank: { bankName: string; bankCode: string; branch: string; accountNo: string; accountName: string; isDemo: boolean; /** 轉帳 QR Code 圖片網址（選填） */ qrImage: string };
   paymentDeadlineHours: number;
   paymentReminderHours: number;
   shipping: { fee: string; freeThreshold: string | null; freeBasis: "AFTER_ITEM_DISCOUNT" | "SUBTOTAL"; isDemo: boolean };
@@ -36,7 +36,7 @@ export const DEFAULT_STORE: StoreSettings = {
   open: true,
   maintenance: false,
   maintenanceMessage: "",
-  bank: { bankName: "示範銀行（請於後台設定）", bankCode: "000", branch: "", accountNo: "0000000000000", accountName: "ATA Coffee（示範）", isDemo: true },
+  bank: { bankName: "示範銀行（請於後台設定）", bankCode: "000", branch: "", accountNo: "0000000000000", accountName: "ATA Coffee（示範）", isDemo: true, qrImage: "" },
   paymentDeadlineHours: 72,
   paymentReminderHours: 24,
   shipping: { fee: "60", freeThreshold: "1500", freeBasis: "AFTER_ITEM_DISCOUNT", isDemo: true },

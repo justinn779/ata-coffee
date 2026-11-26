@@ -28,7 +28,7 @@ interface OrderView {
   originalEstShipDate: string | null;
   pickup: { carrierLabel: string; storeId: string; storeName: string };
   contact: { name: string; phone: string; email: string };
-  payment: null | { deadline: string; amount: string; bank: { bankName: string; bankCode: string; branch: string; accountNo: string; accountName: string; isDemo: boolean } };
+  payment: null | { deadline: string; amount: string; bank: { bankName: string; bankCode: string; branch: string; accountNo: string; accountName: string; isDemo: boolean; qrImage?: string } };
   lastReport: null | { last5: string; at: string; status: string; reason: string | null };
   shipment: null | { carrier: string | null; trackingNo: string | null; shippedAt: string | null };
   canCancel: boolean;
@@ -151,6 +151,12 @@ function OrderPage() {
             <Row k="戶名" v={b.accountName} />
             <Row k="付款期限" v={twDateTime(o.payment.deadline)} />
           </dl>
+          {b.qrImage && (
+            <figure className="mt-6 flex flex-col items-center">
+              <img src={b.qrImage} alt="轉帳 QR Code" width={176} height={176} className="h-44 w-44 bg-white object-contain p-2" />
+              <figcaption className="mt-2 text-[12px] text-[var(--s-muted)]">用銀行 App 掃描轉帳，金額請填 {nt(o.payment.amount)}</figcaption>
+            </figure>
+          )}
           {b.isDemo && <p className="mt-4 text-[12px] text-[var(--s-danger)]">測試環境：這是示範帳戶，請勿匯款。</p>}
         </section>
       )}

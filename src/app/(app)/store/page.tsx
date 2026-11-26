@@ -19,7 +19,7 @@ export default function StoreHome() {
   const ready = o.filter((x) => x.fulfillmentStatus === "READY_TO_SHIP");
   const waitingPre = o.filter((x) => x.fulfillmentStatus === "AWAITING_PACKAGING" && x.paymentStatus === "PAID");
   const demo = !st.bank || st.bank?.isDemo || st.shipping?.isDemo;
-  const missingBiz = !st.business?.name || !st.business?.address || !st.business?.foodRegNo;
+  const missingBiz = !st.business?.name || !st.business?.address;
   return (
     <>
       <PageHeader
@@ -33,7 +33,7 @@ export default function StoreHome() {
       />
       <div className="grid gap-4">
         {demo && <Notice tone="warning">收款帳戶或運費仍是「示範設定」。正式上線前請到「商城設定」填入正式資料。</Notice>}
-        {missingBiz && <Notice tone="warning">業者名稱、地址、食品業者登錄字號尚未填寫（法規必要揭露），商城頁尾會顯示「待補」。</Notice>}
+        {missingBiz && <Notice tone="warning">業者名稱、地址尚未填寫（法規必要揭露），商城頁尾會顯示「待補」。</Notice>}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard label="待對帳" value={toConfirm.length} href="/store/payments/" tone={toConfirm.length ? "warning" : undefined} tip="顧客已回報末五碼，等你確認收款" />
           <StatCard label="逾期待人工確認" value={review.length} href="/store/payments/" tone={review.length ? "danger" : undefined} tip="付款期限已過但顧客有回報，系統不會自動取消" />

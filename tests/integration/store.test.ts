@@ -357,6 +357,21 @@ describe("付款與逾期", () => {
   });
 });
 
+describe("收款設定", () => {
+  it("後台設定收款帳戶與轉帳 QR Code：訂單保存當時的帳戶與 QR Code，之後修改不影響舊訂單", async () => {
+    const f = await storeFixture({ finished: 3 });
+    const base = { open: true, maintenance: false, maintenanceMessage: "", paymentDeadlineHours: 72, paymentReminderHours: 24, shipping: { fee: "60", freeThreshold: "1500", freeBasis: "AFTER_ITEM_DISCOUNT", isDemo: false }, pickupChannels: [{ key: "SEVEN", label: "7-ELEVEN", enabled: true }, { key: "FAMILY", label: "全家", enabled: true }], prepDays: 2, nonShipWeekdays: [0], nonShipDates: [], grindOptions: [{ key: "POUR_OVER", label: "手沖", enabled: true }], minShelfDaysAtShip: 14, maxQtyPerLine: 20, service: { email: "", phone: "", lineUrl: "", hours: "" }, social: { instagram: "", facebook: "", line: "" }, business: { name: "", taxId: "", address: "", foodRegNo: "", phone: "" } };
+    await expect(op("store.settings.save", { ...base, bank: { bankName: "測試銀行", bankCode: "", branch: "", accountNo: "", accountName: "", isDemo: false, qrImage: "" } })).rejects.toThrow(/銀行代碼、帳號與戶名/);
+    await expect(op("store.settings.save", { ...base, bank: { bankName: "測試銀行", bankCode: "812", branch: "", accountNo: "123", accountName: "ATA", isDemo: false, qrImage: "javascript:alert(1)" } })).rejects.toThrow();
+    await op("store.settings.save", { ...base, bank: { bankName: "測試銀行", bankCode: "812", branch: "", accountNo: "00123456789", accountName: "ATA", isDemo: false, qrImage: "https://example.test/qr.png" } });
+    const r = await place([{ variantId: f.v100.id, qty: 1 }]);
+    await op("store.settings.save", { ...base, bank: { bankName: "新銀行", bankCode: "700", branch: "", accountNo: "999", accountName: "ATA", isDemo: false, qrImage: "" } });
+    const o = (await shop<{ order: Record<string, any> }>("order.get", { token: r.token })).order; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(o.payment.bank).toMatchObject({ bankCode: "812", accountNo: "00123456789", qrImage: "https://example.test/qr.png", isDemo: false });
+    expect(sent.find((m) => m.subject.includes("訂單成立"))?.html).toContain("https://example.test/qr.png");
+  });
+});
+
 describe("物流", () => {
   it("超商門市驗證、物流單號與狀態轉換", async () => {
     const f = await storeFixture({ finished: 3 });

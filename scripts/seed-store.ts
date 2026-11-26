@@ -18,7 +18,7 @@ export async function seedStore(db: Firestore, op: Op, ids: { coffees: Array<{ i
     open: true,
     maintenance: false,
     maintenanceMessage: "",
-    bank: { bankName: "示範銀行（請勿匯款）", bankCode: "000", branch: "示範分行", accountNo: "00012345678901", accountName: "ATA Coffee 示範帳戶", isDemo: true },
+    bank: { bankName: "示範銀行（請勿匯款）", bankCode: "000", branch: "示範分行", accountNo: "00012345678901", accountName: "ATA Coffee 示範帳戶", isDemo: true, qrImage: img("qr-demo") },
     paymentDeadlineHours: 72,
     paymentReminderHours: 24,
     shipping: { fee: "60", freeThreshold: "1500", freeBasis: "AFTER_ITEM_DISCOUNT", isDemo: true },

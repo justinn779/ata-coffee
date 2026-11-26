@@ -42,7 +42,7 @@ export const STORE_ADMIN_OPS = {
       open: z.boolean(),
       maintenance: z.boolean(),
       maintenanceMessage: s(300),
-      bank: z.object({ bankName: s(60), bankCode: s(10), branch: s(60), accountNo: s(30), accountName: s(60), isDemo: z.boolean() }),
+      bank: z.object({ bankName: s(60), bankCode: s(10), branch: s(60), accountNo: s(30), accountName: s(60), isDemo: z.boolean(), qrImage: z.preprocess((v) => v ?? "", imgUrl).default("") }),
       paymentDeadlineHours: int(1, 720),
       paymentReminderHours: int(0, 240),
       shipping: z.object({ fee: money, freeThreshold: optMoney, freeBasis: z.enum(["AFTER_ITEM_DISCOUNT", "SUBTOTAL"]), isDemo: z.boolean() }),

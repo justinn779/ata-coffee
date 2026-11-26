@@ -132,13 +132,14 @@ const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g,
 const nt = (v: unknown) => `NT$ ${D((v as string) ?? 0).toDecimalPlaces(0).toNumber().toLocaleString("zh-TW")}`;
 const fmt = (iso: unknown) => (iso ? new Date(new Date(String(iso)).getTime() + 8 * 3600_000).toISOString().slice(0, 16).replace("T", " ") : "");
 
-function layout(title: string, rows: Array<[string, string]>, body: string[], cta?: { label: string; url: string }) {
+function layout(title: string, rows: Array<[string, string]>, body: string[], cta?: { label: string; url: string }, image?: string | null) {
   const html = `<!doctype html><html lang="zh-Hant"><body style="margin:0;background:#FCFAF6;color:#24211E;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif">
 <div style="max-width:520px;margin:0 auto;padding:40px 24px">
 <img src="${esc(SITE_URL)}/brand/logo.png" alt="ATA Coffee" width="72" style="display:block;margin:0 0 32px">
 <h1 style="font-size:20px;font-weight:500;margin:0 0 24px;color:#594235">${esc(title)}</h1>
 ${body.map((p) => `<p style="font-size:14px;line-height:1.8;margin:0 0 12px">${esc(p)}</p>`).join("")}
 ${rows.length ? `<table style="width:100%;border-collapse:collapse;margin:24px 0;font-size:14px">${rows.map(([k, v]) => `<tr><td style="padding:8px 0;border-top:1px solid #F0EBE2;color:#7a6d62;width:40%">${esc(k)}</td><td style="padding:8px 0;border-top:1px solid #F0EBE2;text-align:right">${esc(v)}</td></tr>`).join("")}</table>` : ""}
+${image ? `<p style="margin:0 0 24px"><img src="${esc(image)}" alt="轉帳 QR Code" width="160" style="display:block;background:#fff;padding:8px"></p>` : ""}
 ${cta ? `<a href="${esc(cta.url)}" style="display:inline-block;background:#594235;color:#FCFAF6;text-decoration:none;padding:12px 24px;border-radius:4px;font-size:14px">${esc(cta.label)}</a>` : ""}
 <p style="font-size:12px;color:#9a8f85;margin:40px 0 0">ATA Coffee｜用一杯咖啡，開啟每段獨特體驗。<br>此信件由系統自動寄出，請勿直接回覆。</p>
 </div></body></html>`;
@@ -161,12 +162,12 @@ async function render(db: Firestore, s: StoreSettings, m: OutboxInput & { to: st
     ["戶名", bank.accountName],
   ];
   const base: Array<[string, string]> = [["訂單編號", no]];
-  const mk = (subject: string, title: string, rows: Array<[string, string]>, body: string[], cta?: { label: string; url: string }) => ({ to: m.to, subject: `【ATA Coffee】${subject}`, ...layout(title, rows, body, cta) });
+  const mk = (subject: string, title: string, rows: Array<[string, string]>, body: string[], cta?: { label: string; url: string }, image?: string | null) => ({ to: m.to, subject: `【ATA Coffee】${subject}`, ...layout(title, rows, body, cta, image) });
   switch (m.template) {
     case "ORDER_CREATED":
-      return mk(`訂單成立 ${no}`, "謝謝你的訂購", [...base, ...payRows, ["預計出貨", String(st.estShipDate ?? "")]], ["請在付款期限前完成轉帳，並回報帳號末五碼。"], { label: "查看訂單與回報付款", url: orderUrl });
+      return mk(`訂單成立 ${no}`, "謝謝你的訂購", [...base, ...payRows, ["預計出貨", String(st.estShipDate ?? "")]], ["請在付款期限前完成轉帳，並回報帳號末五碼。"], { label: "查看訂單與回報付款", url: orderUrl }, bank.qrImage || null);
     case "PAYMENT_REMINDER":
-      return mk(`付款即將到期 ${no}`, "付款即將到期", [...base, ...payRows], ["完成轉帳後，請回報帳號末五碼。逾期訂單會自動取消。"], { label: "回報付款", url: orderUrl });
+      return mk(`付款即將到期 ${no}`, "付款即將到期", [...base, ...payRows], ["完成轉帳後，請回報帳號末五碼。逾期訂單會自動取消。"], { label: "回報付款", url: orderUrl }, bank.qrImage || null);
     case "PAYMENT_REPORTED":
       return mk(`已收到付款回報 ${no}`, "已收到你的付款回報", base, ["我們確認款項後會再通知你。"], { label: "查看訂單", url: orderUrl });
     case "PAYMENT_CONFIRMED":

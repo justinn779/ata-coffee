@@ -6,14 +6,14 @@ import { callOp } from "@/lib/api";
 import { Loading } from "@/lib/page";
 import { toast } from "@/components/toast";
 import { Button, Card, CardBody, CardHeader, Notice, PageHeader } from "@/components/ui";
-import { inputCls, labelCls } from "../_shared";
+import { inputCls, labelCls, UploadButton } from "../_shared";
 
 /** 與 functions/src/shop/settings.ts 的 DEFAULT_STORE 相同（未設定時的示範值） */
 const DEFAULT = {
   open: true,
   maintenance: false,
   maintenanceMessage: "",
-  bank: { bankName: "示範銀行（請於後台設定）", bankCode: "000", branch: "", accountNo: "0000000000000", accountName: "ATA Coffee（示範）", isDemo: true },
+  bank: { bankName: "示範銀行（請於後台設定）", bankCode: "000", branch: "", accountNo: "0000000000000", accountName: "ATA Coffee（示範）", isDemo: true, qrImage: "" },
   paymentDeadlineHours: 72,
   paymentReminderHours: 24,
   shipping: { fee: "60", freeThreshold: "1500", freeBasis: "AFTER_ITEM_DISCOUNT", isDemo: true },
@@ -112,6 +112,19 @@ export default function StoreSettings() {
               <input type="checkbox" checked={s.bank.isDemo} onChange={(e) => sub("bank", "isDemo", e.target.checked)} className="accent-[var(--primary)]" />
               示範帳戶（前台會標示請勿匯款）
             </label>
+            <div className={`${labelCls} md:col-span-3`}>
+              轉帳 QR Code（選填，顧客用銀行 App 掃描轉帳；會顯示在訂單付款資訊與訂單成立信）
+              <div className="flex flex-wrap items-center gap-3">
+                {s.bank.qrImage ? <img src={s.bank.qrImage} alt="轉帳 QR Code" className="h-28 w-28 rounded border border-border bg-white object-contain p-1" /> : <span className="flex h-28 w-28 items-center justify-center rounded border border-dashed border-border text-xs">尚未上傳</span>}
+                <UploadButton label={s.bank.qrImage ? "更換圖片" : "上傳 QR Code"} onDone={(u) => sub("bank", "qrImage", u)} />
+                {s.bank.qrImage && (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => sub("bank", "qrImage", "")}>
+                    移除
+                  </Button>
+                )}
+                <span className="text-xs">上傳後記得按「儲存」</span>
+              </div>
+            </div>
             <label className={labelCls}>
               付款期限（下單後幾小時）
               <input className={inputCls} type="number" value={s.paymentDeadlineHours} onChange={(e) => up("paymentDeadlineHours", Number(e.target.value))} />
