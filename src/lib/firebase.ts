@@ -29,10 +29,18 @@ export function fb() {
   const fns = getFunctions(app, "asia-east1");
   const storage = getStorage(app);
   if (useEmulators) {
-    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-    connectFirestoreEmulator(db, "127.0.0.1", 8080);
-    connectFunctionsEmulator(fns, "127.0.0.1", 5001);
-    connectStorageEmulator(storage, "127.0.0.1", 9199);
+    // 商城的精簡初始化（firebase-lite）可能已連線過 Auth／Functions 模擬器
+    const once = (f: () => void) => {
+      try {
+        f();
+      } catch {
+        /* 已連線 */
+      }
+    };
+    once(() => connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true }));
+    once(() => connectFirestoreEmulator(db, "127.0.0.1", 8080));
+    once(() => connectFunctionsEmulator(fns, "127.0.0.1", 5001));
+    once(() => connectStorageEmulator(storage, "127.0.0.1", 9199));
   }
   cached = { app, auth, db, fns, storage };
   return cached;

@@ -6,7 +6,6 @@ import "@fontsource/noto-sans-tc/700.css";
 import "@fontsource/noto-serif-tc/500.css";
 import "@fontsource/noto-serif-tc/600.css";
 import { Toaster } from "@/components/toast";
-import { AuthProvider } from "@/components/auth";
 import "./globals.css";
 
 const bp = process.env.NEXT_PUBLIC_BASE_PATH || "";
@@ -42,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        {children}
         <Toaster />
       </body>
     </html>

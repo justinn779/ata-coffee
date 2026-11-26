@@ -7,6 +7,7 @@ import { callOp, opAction } from "@/lib/api";
 import { useCol, useDocument, useOp, type Row } from "@/lib/data";
 import { Guard, useQS } from "@/lib/page";
 import { ActionDialog } from "@/components/action-dialog";
+import { StorePanel } from "./store-panel";
 import { DeleteButton } from "@/components/delete-button";
 import { StatusBadge } from "@/components/status";
 import { A, Badge, Card, CardBody, CardHeader, KV, LinkButton, Notice, PageHeader, SimpleTable } from "@/components/ui";
@@ -69,7 +70,7 @@ export default function OrderDetail() {
                       action={async (v) => callOp("order.return", { orderId: x.id, reason: v.reason, items: returnable.map((a) => ({ allocationId: a.id, quantity: String(v[`q_${a.id}`] ?? "0") })).filter((i) => Number(i.quantity) > 0) })}
                     />
                   )}
-                  {["PAID", "PARTIALLY_REFUNDED"].includes(x.paymentStatus) && <ActionDialog label="記錄退款" variant="ghost" title="記錄退款" payload={{ orderId: x.id }} fields={[{ name: "amount", label: "退款金額", type: "number", required: true }, { name: "reference", label: "參考資訊" }, { name: "note", label: "備註" }]} action={opAction("order.refund")} />}
+                  {["PAID", "PARTIALLY_REFUNDED", "REFUND_PENDING", "EXPIRED"].includes(x.paymentStatus) && <ActionDialog label="記錄退款" variant="ghost" title="記錄退款" payload={{ orderId: x.id }} fields={[{ name: "amount", label: "退款金額", type: "number", required: true }, { name: "reference", label: "參考資訊" }, { name: "note", label: "備註" }]} action={opAction("order.refund")} />}
                   {x.fulfillmentStatus !== "CANCELLED" && (
                     <LinkButton href={`/print/orders/?ids=${x.id}`} variant="outline">
                       列印出貨單
@@ -105,7 +106,8 @@ export default function OrderDetail() {
               }
             />
             <div className="grid gap-6">
-              {x.fulfillmentStatus === "AWAITING_PACKAGING" && (
+              {x.channel === "STORE" && <StorePanel order={x} />}
+              {x.fulfillmentStatus === "AWAITING_PACKAGING" && pos.data.some((p) => p.status === "PLANNED") && (
                 <Notice tone="warning">
                   此訂單有接單後分裝的品項：{pos.data.filter((p) => p.status === "PLANNED").map((p) => <A key={p.id} href={`/production/view/?id=${p.id}`}>{` ${p.orderNo}`}</A>)}，完成分裝後會自動分配並轉為「可出貨」。
                 </Notice>
@@ -113,7 +115,7 @@ export default function OrderDetail() {
               <div className="grid gap-6 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                   <CardHeader title="訂單明細" description="單價、商品名稱與成本均為快照，不隨日後價格變動" />
-                  <SimpleTable head={["品項編號", "商品", "數量", "單價", "折扣", "小計", "稅額", "成本快照", "履約方式"]} rows={items.data.map((it) => [it.skuSnapshot, it.nameSnapshot, it.quantity, fmtMoney(it.unitPriceSnapshot), fmtMoney(it.discount), fmtMoney(it.lineTotal), fmtMoney2(it.taxAmount), fmtMoney2(it.costSnapshot), it.fulfillmentMode === "MADE_TO_ORDER" ? <Badge key="m" tone="warning">接單後分裝</Badge> : it.fulfillmentMode === "NOT_TRACKED" ? "不追蹤" : it.isBundle ? "套組現貨" : "現貨"])} />
+                  <SimpleTable head={["品項編號", "商品", "數量", "單價", "折扣", "小計", "稅額", "成本快照", "履約方式"]} rows={items.data.map((it) => [it.skuSnapshot, it.nameSnapshot, it.quantity, fmtMoney(it.unitPriceSnapshot), fmtMoney(it.discount), fmtMoney(it.lineTotal), fmtMoney2(it.taxAmount), fmtMoney2(it.costSnapshot), it.fulfillmentMode === "PREORDER" ? <Badge key="m" tone="info">預購</Badge> : it.fulfillmentMode === "MADE_TO_ORDER" ? <Badge key="m" tone="warning">接單後分裝</Badge> : it.fulfillmentMode === "NOT_TRACKED" ? "不追蹤" : it.isBundle ? "套組現貨" : "現貨"])} />
                   <CardBody className="border-t border-border">
                     <KV cols={4} items={[["商品小計", fmtMoney(x.subtotal)], ["折扣合計", fmtMoney(x.discountTotal)], [`稅額（${x.taxMode === "INCLUSIVE" ? "內含" : x.taxMode === "EXCLUSIVE" ? "外加" : "不計"} ${fmtNum(D(x.taxRate).mul(100), 1)}%）`, fmtMoney2(x.taxTotal)], ["運費收入", fmtMoney(x.shippingFee)], ["訂單總額", <b key="t">{fmtMoney(x.total)}</b>], ["已退款", fmtMoney(x.refundedTotal)]]} />
                   </CardBody>

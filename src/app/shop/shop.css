@@ -1,0 +1,217 @@
+/* ───────── ATA Coffee Store — Design System ─────────
+   極簡優先：大量留白、細線、少量圓角（2–6px）、無漸層、無厚重陰影。
+   色彩：主背景 #FCFAF6、次背景 #F0EBE2、輔助 #C6B39D、品牌主色 #594235、主要文字 #24211E
+   間距 tokens：4 8 12 16 24 32 48 64 96（Tailwind 1 2 3 4 6 8 12 16 24）
+   對比：#24211E on #FCFAF6 ≈ 15:1；muted #6E6258 on #FCFAF6 ≈ 5.9:1；#FCFAF6 on #594235 ≈ 9.6:1 */
+.shop {
+  --s-bg: #fcfaf6;
+  --s-bg-2: #f0ebe2;
+  --s-line: #e6ddd0;
+  --s-accent: #c6b39d;
+  --s-brand: #594235;
+  --s-brand-hover: #4a372c;
+  --s-fg: #24211e;
+  --s-muted: #6e6258;
+  --s-danger: #9b3b2b;
+  --s-ok: #4f5f4b;
+  --s-radius: 4px;
+  background: var(--s-bg);
+  color: var(--s-fg);
+  color-scheme: light;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  font-family: "Noto Sans TC", "Inter Variable", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.shop .serif {
+  font-family: "Noto Serif TC", serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.shop .num {
+  font-family: "Inter Variable", "Noto Sans TC", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.shop a {
+  color: inherit;
+  text-decoration: none;
+}
+.shop :focus-visible {
+  outline: 2px solid var(--s-brand);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.shop .s-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+@media (min-width: 768px) {
+  .shop .s-wrap {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+.shop .s-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 24px;
+  border-radius: var(--s-radius);
+  background: var(--s-brand);
+  color: var(--s-bg);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+  border: 1px solid var(--s-brand);
+}
+.shop .s-btn:hover {
+  background: var(--s-brand-hover);
+}
+.shop .s-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.shop .s-btn-line {
+  background: transparent;
+  color: var(--s-brand);
+}
+.shop .s-btn-line:hover {
+  background: var(--s-bg-2);
+}
+.shop .s-btn-light {
+  background: var(--s-bg);
+  border-color: var(--s-bg);
+  color: var(--s-fg);
+}
+.shop .s-btn-light:hover {
+  background: var(--s-bg-2);
+}
+.shop .s-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--s-radius);
+  color: var(--s-fg);
+  position: relative;
+}
+.shop .s-icon-btn:hover {
+  background: var(--s-bg-2);
+}
+.shop .s-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--s-radius);
+  background: #fff;
+  font-size: 16px; /* 16px 避免 iOS 自動放大 */
+  color: var(--s-fg);
+}
+.shop textarea.s-input {
+  padding: 12px 14px;
+  min-height: 88px;
+}
+.shop .s-input:focus {
+  outline: none;
+  border-color: var(--s-brand);
+}
+.shop .s-input[aria-invalid="true"] {
+  border-color: var(--s-danger);
+}
+.shop .s-label {
+  display: block;
+  font-size: 13px;
+  color: var(--s-muted);
+  margin-bottom: 6px;
+}
+.shop .s-chip {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--s-radius);
+  font-size: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+.shop .s-chip[aria-pressed="true"],
+.shop .s-chip[aria-checked="true"] {
+  border-color: var(--s-brand);
+  box-shadow: inset 0 0 0 1px var(--s-brand);
+}
+.shop .s-chip:disabled {
+  color: #b5aba1;
+  cursor: not-allowed;
+}
+.shop .s-muted {
+  color: var(--s-muted);
+}
+.shop .s-line {
+  border-color: var(--s-line);
+}
+.shop .s-img {
+  background: var(--s-bg-2);
+  overflow: hidden;
+}
+.shop .s-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.shop .s-fade {
+  animation: s-fade 0.5s ease both;
+}
+@keyframes s-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.shop .s-sheet {
+  animation: s-up 0.25s ease both;
+}
+@keyframes s-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.shop details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.shop details > summary::-webkit-details-marker {
+  display: none;
+}
+.shop .s-noscroll::-webkit-scrollbar {
+  display: none;
+}
+.shop .s-noscroll {
+  scrollbar-width: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop *,
+  .shop *::before,
+  .shop *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,4 +1,4 @@
-import { Bean, ShoppingBag, Tag, BarChart3, Settings } from "lucide-react";
+import { Bean, ShoppingBag, Tag, BarChart3, Settings, Store } from "lucide-react";
 
 export type NavTab = { href: string; label: string };
 export type NavModule = { key: string; label: string; desc: string; icon: typeof Bean; tabs: NavTab[] };
@@ -44,6 +44,22 @@ export const MODULES: NavModule[] = [
     tabs: [
       { href: "/products/", label: "商品" },
       { href: "/series/", label: "品牌系列與履歷" },
+    ],
+  },
+  {
+    key: "store",
+    label: "官方商城",
+    desc: "付款對帳、商城商品、預購、優惠、首頁內容",
+    icon: Store,
+    tabs: [
+      { href: "/store/", label: "商城總覽" },
+      { href: "/store/payments/", label: "付款對帳" },
+      { href: "/store/products/", label: "商城商品" },
+      { href: "/store/preorders/", label: "預購" },
+      { href: "/store/promotions/", label: "優惠" },
+      { href: "/store/content/", label: "首頁與內容" },
+      { href: "/store/settings/", label: "商城設定" },
+      { href: "/store/reports/", label: "電商報表" },
     ],
   },
   { key: "report", label: "成本與報表", desc: "營收、成本、毛利", icon: BarChart3, tabs: [{ href: "/reports/", label: "成本與報表" }] },

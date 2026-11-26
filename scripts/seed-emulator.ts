@@ -14,6 +14,7 @@ import { createCupping, createBrew } from "../functions/src/domain/lab";
 import { saveCurve } from "../functions/src/domain/curves";
 import { withComputedRor, type CurvePoint } from "../functions/src/curves/parse";
 import { toTaipeiLocalInput } from "../src/lib/time";
+import { seedStore } from "./seed-store";
 
 if (process.argv.includes("--emulator")) {
   process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
@@ -107,7 +108,7 @@ async function main() {
   const col100 = await op("variant.save", { productId: pCol.id, sku: "ATA002-COL-100", name: "100g 咖啡豆", listPrice: "400", salePrice: "380", standardCost: "100", fillWeightG: "100", stockPolicy: "STOCK_ONLY", status: "ACTIVE", materials: b100 });
   const drip1 = await op("variant.save", { productId: pDrip.id, sku: "DRIP-YRG-1", name: "單包濾掛 11g", listPrice: "45", salePrice: "40", standardCost: "15", fillWeightG: "11", stockPolicy: "STOCK_ONLY", status: "ACTIVE", materials: bDrip });
   const set5 = await op("variant.save", { productId: pSet.id, sku: "DRIP-SET-5", name: "濾掛 5 入", listPrice: "220", salePrice: "190", isBundle: true, stockPolicy: "STOCK_ONLY", status: "ACTIVE", components: [{ componentVariantId: drip1.id, quantity: "5" }] });
-  await op("variant.save", { productId: pGift.id, sku: "GIFT-ATI-01", name: "禮盒（100g + 濾掛 3 入）", listPrice: "680", salePrice: "640", isBundle: true, stockPolicy: "STOCK_ONLY", status: "ACTIVE", components: [{ componentVariantId: yrg100.id, quantity: "1" }, { componentVariantId: drip1.id, quantity: "3" }] });
+  const gift1 = await op("variant.save", { productId: pGift.id, sku: "GIFT-ATI-01", name: "禮盒（100g + 濾掛 3 入）", listPrice: "680", salePrice: "640", isBundle: true, stockPolicy: "STOCK_ONLY", status: "ACTIVE", components: [{ componentVariantId: yrg100.id, quantity: "1" }, { componentVariantId: drip1.id, quantity: "3" }] });
 
   // 烘焙＋示範曲線＋杯測＋手沖
   const plan = [
@@ -186,6 +187,7 @@ async function main() {
   await mk(1, [{ variantId: col100.id, quantity: "1" }]);
   await op("cost.addPeriod", { amount: "1200", occurredOn: ymd(5), isEstimate: "false", calcNote: "示範：網站與軟體訂閱" });
   await op("settings.save", { taxMode: "INCLUSIVE", taxRate: "0.05", requirePaymentBeforeShip: "true", lowGreenG: "3000", lowRoastedG: "500", lowFinishedPcs: "5", expiryWarnDays: "14" });
+  await seedStore(db, op, { coffees, mats, roastLots: roasts.map((r) => r.lotId), pYrg: pYrg.id, pCol: pCol.id, pDrip: pDrip.id, pSet: pSet.id, pGift: pGift.id, yrg100: yrg100.id, yrg200: yrg200.id, col100: col100.id, drip1: drip1.id, set5: set5.id, gift1: gift1.id });
   console.log("示範資料建立完成：admin@ata.local ／ ata-demo-2026（僅限本機模擬器）");
 }
 

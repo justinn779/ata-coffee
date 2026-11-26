@@ -1,6 +1,23 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "ata-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 }
+    {
+      "name": "ata-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "store-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "preview:store"
+      ],
+      "port": 4173
+    }
   ]
 }

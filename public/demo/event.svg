@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 500" width="1500" height="500"><rect width="1500" height="500" fill="#D9CBB8"/>
+<circle cx="930.0" cy="275.0" r="160.0" fill="#F0EBE2" opacity=".18"/><circle cx="930.0" cy="275.0" r="100.0" fill="#FCFAF6" opacity=".22"/>
+<ellipse cx="930.0" cy="275.0" rx="35.0" ry="50.0" fill="#594235" opacity=".55" transform="rotate(25 930.0 275.0)"/>
+<text x="1476" y="476" font-family="sans-serif" font-size="22" fill="#FCFAF6" text-anchor="end" opacity=".7">示範圖片</text></svg>

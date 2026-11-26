@@ -16,7 +16,8 @@
     "seed": "tsx scripts/seed-emulator.ts --emulator",
     "build:emulator": "node scripts/build-emulator.mjs",
     "preview": "node scripts/serve-static.mjs",
-    "deploy": "npm run functions:build && firebase deploy --only firestore,storage,functions"
+    "deploy": "npm run functions:build && firebase deploy --only firestore,storage,functions",
+    "preview:store": "npm run functions:build && firebase emulators:exec --only auth,firestore,functions,storage --project demo-ata-coffee \"npm run seed && node scripts/serve-static.mjs\""
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

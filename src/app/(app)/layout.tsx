@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
-import { AuthGate, logout, useAuth } from "@/components/auth";
+import { AuthGate, AuthProvider, logout, useAuth } from "@/components/auth";
 import { Loading } from "@/lib/page";
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -16,8 +16,10 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthGate>
-      <Shell>{children}</Shell>
-    </AuthGate>
+    <AuthProvider>
+      <AuthGate>
+        <Shell>{children}</Shell>
+      </AuthGate>
+    </AuthProvider>
   );
 }

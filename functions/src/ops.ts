@@ -604,7 +604,7 @@ export const OPS = {
     },
   ),
   "order.markPending": op(z.object({ orderId: docId("訂單"), reference: optStr(100) }), (i, ctx) => tx(ctx, (t) => markPaymentPending(t, i.orderId, ctx.actor, i.reference)).then(() => ({ message: "已標記為待確認" }))),
-  "order.confirmPayment": op(z.object({ orderId: docId("訂單"), method: z.enum(["BANK_TRANSFER", "CASH", "CARD", "OTHER"]).default("BANK_TRANSFER"), reference: optStr(100), note: optStr(500) }), async ({ orderId, ...i }, ctx) => {
+  "order.confirmPayment": op(z.object({ orderId: docId("訂單"), method: z.enum(["BANK_TRANSFER", "CASH", "CARD", "OTHER"]).default("BANK_TRANSFER"), amount: optDec("實收金額", { min: 0 }), reference: optStr(100), note: optStr(500) }), async ({ orderId, ...i }, ctx) => {
     const r = await tx(ctx, (t) => confirmPayment(t, orderId, i, ctx.actor));
     return { message: r.alreadyPaid ? "此訂單先前已確認付款，未重複記錄" : "已確認付款", alreadyPaid: r.alreadyPaid };
   }),

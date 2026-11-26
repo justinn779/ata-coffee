@@ -23,6 +23,15 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
       allow update, delete: if false;
     }
+    // 商城圖片（商品、首頁）：公開讀取；只有管理員可上傳 JPG/PNG/WebP、5MB 內，上傳後不可覆寫
+    match /store/{fileName} {
+      allow read: if true;
+      allow create: if isAdmin()
+        && fileName.matches('^[0-9a-f-]{36}[.](jpg|jpeg|png|webp)$')
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow update, delete: if false;
+    }
     match /{all=**} {
       allow read, write: if false;
     }
