@@ -75,7 +75,8 @@ export async function saveVariant(tx: Tx, input: Data & { id?: string | null; pr
     }
   }
   const mats = [];
-  if (!data.isBundle) for (const m of materials) {
+  // 套組的包材＝禮盒、提袋等（商城下單時預留、出貨時扣除）；單品的包材＝分裝時扣除的袋子、標籤
+  for (const m of materials) {
     const mm = await tx.must(C.materials, m.materialId, "包材");
     mats.push({ materialId: mm.id, materialName: mm.name, quantityPerUnit: toDb(m.quantityPerUnit, 3) });
   }

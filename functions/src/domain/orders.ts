@@ -31,6 +31,19 @@ export interface CreateOrderInput {
   items: Array<{ variantId: string; quantity: number; discount?: Num | null }>;
 }
 
+/**
+ * 訂單事件掛勾：商城在付款確認、取消時需要額外處理（預購配額、優惠使用次數、通知），
+ * 由 functions/src/shop 註冊，避免訂單模組反向依賴商城模組。
+ */
+type OrderHook = (tx: Tx, order: Record<string, unknown> & { id: string }, actor: Actor) => Promise<void>;
+export const orderHooks: { paid: OrderHook[]; cancelled: OrderHook[]; shipped: OrderHook[]; refunded: OrderHook[] } = { paid: [], cancelled: [], shipped: [], refunded: [] };
+
+/** 狀態歷史：每次訂單、付款、履約狀態變動都留一筆（後台與顧客訂單進度使用） */
+export function statusEvent(tx: Tx, orderId: string, field: "orderStatus" | "paymentStatus" | "fulfillmentStatus", from: unknown, to: unknown, actor: Actor, note?: string | null) {
+  if (from === to) return;
+  tx.create(C.orderEvents, { orderId, field, from: from ?? null, to, actorId: actor.userId, actorName: actor.name ?? null, note: note ?? null, at: nowIso() });
+}
+
 const idemDocId = (key: string) => "order-" + createHash("sha256").update(key).digest("hex").slice(0, 40);
 
 export async function createOrder(tx: Tx, input: CreateOrderInput, actor: Actor) {
@@ -259,7 +272,7 @@ async function updateShippedOrderInfo(tx: Tx, o: Record<string, unknown> & { id:
   return tx.must(C.orders, o.id, "訂單");
 }
 
-async function planMadeToOrder(tx: Tx, args: { orderId: string; orderItemId: string; variant: Record<string, unknown> & { id: string }; units: number; actor: Actor }) {
+export async function planMadeToOrder(tx: Tx, args: { orderId: string; orderItemId: string; variant: Record<string, unknown> & { id: string }; units: number; actor: Actor }) {
   const v = args.variant;
   if (!v.coffeeId || !v.fillWeightG) throw new DomainError(`${v.sku} 未設定對應咖啡豆或填充重量，無法接單後分裝`);
   const roasted = await ensureCoffeeItem(tx, v.coffeeId as string, "ROASTED");
@@ -272,6 +285,7 @@ async function planMadeToOrder(tx: Tx, args: { orderId: string; orderItemId: str
 export async function markPaymentPending(tx: Tx, orderId: string, actor: Actor, reference?: string | null) {
   const o = await tx.must(C.orders, orderId, "訂單");
   if (o.paymentStatus !== "UNPAID") return o;
+  statusEvent(tx, orderId, "paymentStatus", o.paymentStatus, "PENDING_CONFIRMATION", actor, reference ?? null);
   audit(tx, actor, "order.paymentPending", "SalesOrder", orderId, `顧客回報匯款 ${reference ?? ""}`);
   return tx.update(C.orders, orderId, { paymentStatus: "PENDING_CONFIRMATION", paymentReference: reference ?? null, updatedAt: nowIso() });
 }
@@ -285,6 +299,8 @@ export async function confirmPayment(tx: Tx, orderId: string, input: { method?: 
   const paidAt = input.paidAt ?? nowIso();
   tx.set(C.payments, `pay-${orderId}`, { orderId, orderNo: o.orderNo, type: "PAYMENT", method: input.method ?? "BANK_TRANSFER", amount: toDb(amount, 2), reference: input.reference ?? null, note: input.note ?? null, occurredAt: paidAt });
   const updated = await tx.update(C.orders, orderId, { paymentStatus: "PAID", paidAt, updatedAt: nowIso() });
+  statusEvent(tx, orderId, "paymentStatus", o.paymentStatus, "PAID", actor, input.reference ?? null);
+  for (const h of orderHooks.paid) await h(tx, updated, actor);
   audit(tx, actor, "order.confirmPayment", "SalesOrder", orderId, `確認付款 ${amount}（${input.reference ?? "無參考號"}）`);
   return { order: updated, alreadyPaid: false };
 }
@@ -312,6 +328,8 @@ export async function shipOrder(tx: Tx, orderId: string, input: { method?: strin
     shippedAt,
     updatedAt: nowIso(),
   });
+  statusEvent(tx, orderId, "fulfillmentStatus", o.fulfillmentStatus, "SHIPPED", actor, [input.carrier, input.trackingNo].filter(Boolean).join(" ") || null);
+  for (const h of orderHooks.shipped) await h(tx, updated, actor);
   audit(tx, actor, "order.ship", "SalesOrder", orderId, `出貨 ${o.orderNo} ${input.carrier ?? ""} ${input.trackingNo ?? ""}`);
   return updated;
 }
@@ -320,18 +338,22 @@ export async function completeOrder(tx: Tx, orderId: string, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
   if (o.fulfillmentStatus !== "SHIPPED") confirmOr("這筆訂單還沒出貨，仍要標記完成嗎？（不會扣庫存）");
   await tx.update(C.orders, orderId, { fulfillmentStatus: "COMPLETED", completedAt: nowIso(), updatedAt: nowIso() });
+  statusEvent(tx, orderId, "fulfillmentStatus", o.fulfillmentStatus, "COMPLETED", actor);
   audit(tx, actor, "order.complete", "SalesOrder", orderId, "訂單完成");
 }
 
 export async function recordRefund(tx: Tx, orderId: string, input: { amount: Num; method?: string; reference?: string | null; note?: string | null }, actor: Actor) {
   const o = await tx.must(C.orders, orderId, "訂單");
-  if (!["PAID", "PARTIALLY_REFUNDED"].includes(o.paymentStatus as string)) confirmOr("這筆訂單還沒確認付款，仍要記錄退款嗎？");
+  if (!["PAID", "PARTIALLY_REFUNDED", "REFUND_PENDING"].includes(o.paymentStatus as string)) confirmOr("這筆訂單還沒確認付款，仍要記錄退款嗎？");
   const amount = money(input.amount);
   if (amount.lte(0)) throw new DomainError("退款金額必須大於 0");
   const refunded = D(o.refundedTotal as string).add(amount);
   if (refunded.gt(o.total as string)) confirmOr(`退款總額 ${refunded} 會超過訂單金額 ${o.total}，仍要記錄嗎？`);
   tx.create(C.payments, { orderId, orderNo: o.orderNo, type: "REFUND", method: input.method ?? "BANK_TRANSFER", amount: toDb(amount, 2), reference: input.reference ?? null, note: input.note ?? null, occurredAt: nowIso() });
-  await tx.update(C.orders, orderId, { refundedTotal: toDb(refunded, 2), paymentStatus: refunded.gte(o.total as string) ? "REFUNDED" : "PARTIALLY_REFUNDED", updatedAt: nowIso() });
+  const nextPay = refunded.gte(o.total as string) ? "REFUNDED" : "PARTIALLY_REFUNDED";
+  const after = await tx.update(C.orders, orderId, { refundedTotal: toDb(refunded, 2), paymentStatus: nextPay, updatedAt: nowIso() });
+  statusEvent(tx, orderId, "paymentStatus", o.paymentStatus, nextPay, actor, `退款 ${amount}`);
+  for (const h of orderHooks.refunded) await h(tx, { ...after, lastRefund: toDb(amount, 2) }, actor);
   audit(tx, actor, "order.refund", "SalesOrder", orderId, `退款 ${amount}`);
 }
 
@@ -346,7 +368,9 @@ export async function cancelOrder(tx: Tx, orderId: string, input: { reason?: str
     await tx.update(C.allocations, a.id, { status: "RELEASED" });
   }
   for (const p of pos) await cancelProductionOrder(tx, p.id, actor, { reason: `訂單 ${o.orderNo} 取消`, fromOrder: true });
-  await tx.update(C.orders, orderId, { fulfillmentStatus: "CANCELLED", cancelledAt: nowIso(), cancelReason: input.reason ?? null, updatedAt: nowIso() });
+  const cancelled = await tx.update(C.orders, orderId, { fulfillmentStatus: "CANCELLED", cancelledAt: nowIso(), cancelReason: input.reason ?? null, updatedAt: nowIso() });
+  statusEvent(tx, orderId, "fulfillmentStatus", o.fulfillmentStatus, "CANCELLED", actor, input.reason ?? null);
+  for (const h of orderHooks.cancelled) await h(tx, cancelled, actor);
   if (input.refundAmount != null && D(input.refundAmount).gt(0)) await recordRefund(tx, orderId, { amount: input.refundAmount, note: "訂單取消退款" }, actor);
   audit(tx, actor, "order.cancel", "SalesOrder", orderId, `取消訂單 ${o.orderNo}${input.reason ? "：" + input.reason : ""}`);
   return tx.must(C.orders, orderId, "訂單");

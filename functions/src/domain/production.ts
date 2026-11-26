@@ -86,7 +86,10 @@ export async function completeProductionOrder(tx: Tx, productionOrderId: string,
   if (loss.isNegative()) throw new DomainError("損耗不可為負");
   const variant = await tx.must(C.variants, po.targetVariantId as string, "目標品項");
   const src = await tx.must<InvLot>(C.lots, po.sourceLotId as string, "熟豆批次");
-  const resv = (await tx.query<Reservation>(C.reservations, [["productionOrderId", "==", po.id]])).filter((r) => r.status === "ACTIVE");
+  const allResv = (await tx.query<Reservation>(C.reservations, [["productionOrderId", "==", po.id]])).filter((r) => r.status === "ACTIVE");
+  // 熟豆保留之外的保留（商城接單後分裝預留的包材）先釋放，再依 FIFO 實際扣包材
+  for (const r of allResv.filter((x) => x.lotId !== src.id)) await releaseReservation(tx, r.id);
+  const resv = allResv.filter((x) => x.lotId === src.id);
   const beans = D(po.fillWeightG as string).mul(input.actualQty);
   const completedAt = input.completedAt ?? nowIso();
   const groupId = newId();

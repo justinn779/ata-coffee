@@ -10,6 +10,7 @@ import { getStorage } from "firebase-admin/storage";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, onRequest, type CallableRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineBoolean, defineString } from "firebase-functions/params";
 import { z } from "zod";
 import { DomainError, errorMessage } from "../../src/lib/errors";
@@ -20,6 +21,12 @@ import { C } from "./types";
 import { claimFirstAdmin, hashApiKey } from "./domain/master";
 import { createOrder } from "./domain/orders";
 import { notifyAfterOp, sendDailySummary } from "./notify/notify";
+import { runShopOp } from "./shop/ops";
+import { ShopError } from "./shop/errors";
+import { defaultProvider, processOutbox } from "./shop/outbox";
+import { expireOne, remindOne } from "./shop/orders";
+import { storeSettingsDb } from "./shop/settings";
+import { lineCallback, lineMockPage, lineStart, type LineConfig } from "./shop/line";
 
 initializeApp();
 const db = getFirestore();
@@ -27,12 +34,17 @@ setGlobalOptions({ region: "asia-east1", maxInstances: 10 });
 const BOOTSTRAP_ADMIN_EMAIL = defineString("BOOTSTRAP_ADMIN_EMAIL", { default: "" });
 /** App Check 強制驗證：正式環境在 functions/.env.<專案> 設 ENFORCE_APP_CHECK=true；模擬器預設 false */
 const ENFORCE_APP_CHECK = defineBoolean("ENFORCE_APP_CHECK", { default: false });
+/** LINE Login 憑證：放在 functions/.env.<專案>（不進 Git）；未設定時正式環境不提供 LINE 登入 */
+const LINE_CHANNEL_ID = defineString("LINE_CHANNEL_ID", { default: "" });
+const LINE_CHANNEL_SECRET = defineString("LINE_CHANNEL_SECRET", { default: "" });
+const IS_EMULATOR = process.env.FUNCTIONS_EMULATOR === "true";
 
 const CODE: Record<number, ConstructorParameters<typeof HttpsError>[0]> = { 400: "invalid-argument", 401: "unauthenticated", 403: "permission-denied", 404: "not-found", 409: "failed-precondition", 422: "failed-precondition", 429: "resource-exhausted" };
 
 function toHttpsError(e: unknown): HttpsError {
   if (e instanceof HttpsError) return e;
   if (e instanceof CurveParseError) return new HttpsError("invalid-argument", ["檔案驗證失敗：", ...e.errors].join("\n"), { code: "CURVE_PARSE", errors: e.errors });
+  if (e instanceof ShopError) return new HttpsError(CODE[e.status] ?? "failed-precondition", e.message, { code: e.code, data: e.data ?? null });
   if (e instanceof DomainError) return new HttpsError(CODE[e.status] ?? "failed-precondition", e.message, { code: e.code, fieldErrors: (e as DomainError & { fieldErrors?: unknown }).fieldErrors ?? null });
   return new HttpsError("internal", errorMessage(e));
 }
@@ -140,4 +152,72 @@ export const storefront = onRequest({ cors: false, timeoutSeconds: 60 }, async (
 export const dailyDigest = onSchedule({ schedule: "30 8 * * *", timeZone: "Asia/Taipei", timeoutSeconds: 120, retryCount: 1 }, async () => {
   const r = await sendDailySummary({ db });
   console.log("每日彙整", JSON.stringify(r));
+});
+
+// ── 官方商城 ──
+
+/** 商城 API（公開＋顧客）：與管理員 api 分開；顧客登入（Google／LINE）可選 */
+export const shop = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 60, memory: "512MiB" }, async (req: CallableRequest<{ op?: string; input?: unknown }>) => {
+  const a = req.auth;
+  const who = a ? { uid: a.uid, email: (a.token.email as string | undefined) ?? null, emailVerified: !!a.token.email_verified, name: (a.token.name as string | undefined) ?? null } : { uid: null };
+  try {
+    const data = await runShopOp(String(req.data?.op ?? ""), req.data?.input, { db, who, ip: req.rawRequest.ip ?? null, allowMock: IS_EMULATOR });
+    return { ok: true, data };
+  } catch (e) {
+    if (!(e instanceof DomainError)) console.error("shop", req.data?.op, e);
+    throw toHttpsError(e);
+  }
+});
+
+/** 每 10 分鐘：逾期未付款自動取消、付款提醒、重寄失敗通知 */
+export const shopTasks = onSchedule({ schedule: "every 10 minutes", timeZone: "Asia/Taipei", timeoutSeconds: 300, retryCount: 0 }, async () => {
+  const r = await runShopTasks();
+  console.log("shopTasks", JSON.stringify(r));
+});
+
+export async function runShopTasks(now = new Date()) {
+  const s = await storeSettingsDb(db);
+  const actor = { userId: null, name: "系統（付款期限）" };
+  const out = { expired: 0, review: 0, reminded: 0, sent: 0 };
+  const unpaid = await db.collection(C.orders).where("channel", "==", "STORE").where("paymentStatus", "in", ["UNPAID", "PENDING_CONFIRMATION", "UNDER_REVIEW"]).get();
+  for (const d of unpaid.docs) {
+    const st = (d.data().store ?? {}) as { paymentDeadline?: string };
+    if (!st.paymentDeadline) continue;
+    try {
+      if (st.paymentDeadline <= now.toISOString()) {
+        const r = await runTx(db, (t) => expireOne(t, d.id, now, actor));
+        if (r === "expired") out.expired++;
+        if (r === "review") out.review++;
+      } else if (s.paymentReminderHours > 0 && (await runTx(db, (t) => remindOne(t, d.id, now, s.paymentReminderHours)))) out.reminded++;
+    } catch (e) {
+      console.error("expire", d.id, e);
+    }
+  }
+  out.sent = await processOutbox(db, await defaultProvider(db), { limit: 50 });
+  return out;
+}
+
+/** 有新通知寫入寄件匣就立刻寄出（交易已提交才會觸發） */
+export const outboxSend = onDocumentCreated({ document: "notifyOutbox/{id}", retry: false }, async (ev) => {
+  await processOutbox(db, await defaultProvider(db), { ids: [ev.params.id] });
+});
+
+function lineCfg(): LineConfig {
+  const project = process.env.GCLOUD_PROJECT ?? "ata-coffee";
+  const callbackUrl = IS_EMULATOR ? `http://127.0.0.1:5001/${project}/asia-east1/lineAuth/callback` : `https://asia-east1-${project}.cloudfunctions.net/lineAuth/callback`;
+  return { channelId: LINE_CHANNEL_ID.value(), channelSecret: LINE_CHANNEL_SECRET.value(), callbackUrl, mock: IS_EMULATOR && !LINE_CHANNEL_ID.value() };
+}
+
+/** LINE Login：/start、/callback（模擬器另有 /mock 測試授權頁） */
+export const lineAuth = onRequest({ timeoutSeconds: 30, cors: false }, async (req, res) => {
+  try {
+    const cfg = lineCfg();
+    if (req.path.endsWith("/start")) return await lineStart(db, cfg, req, res);
+    if (req.path.endsWith("/callback")) return await lineCallback(db, cfg, req, res);
+    if (req.path.endsWith("/mock")) return lineMockPage(cfg, req, res);
+    res.status(404).send("Not found");
+  } catch (e) {
+    console.error("lineAuth", e);
+    res.status(500).send("登入發生錯誤，請稍後再試");
+  }
 });

@@ -9,7 +9,7 @@ export interface OrderItemDoc {
   variantId: string;
   quantity: number;
   isBundle: boolean;
-  fulfillmentMode: "STOCK" | "MADE_TO_ORDER" | "NOT_TRACKED";
+  fulfillmentMode: "STOCK" | "MADE_TO_ORDER" | "NOT_TRACKED" | "PREORDER";
   bundleComponents?: Array<{ variantId: string; quantity: number }>;
   [k: string]: unknown;
 }

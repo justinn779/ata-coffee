@@ -26,6 +26,8 @@ import { MAX_COUNT_LINES, submitStockCount } from "./domain/stockcount";
 import { randomBytes } from "node:crypto";
 import { realChannels, type Channels } from "./notify/channels";
 import { dispatch, getChannels, getNotifySettings, NOTIFY_EVENTS, notifyAfterOp, SECRETS_COL, sendDailySummary } from "./notify/notify";
+import { STORE_ADMIN_OPS } from "./shop/admin";
+import "./shop/orders"; // 註冊商城訂單掛勾（付款確認、取消、出貨、退款）
 import { detectMapping, parseArtisanAlog, parseCsvCurve, preprocessCsv, withComputedRor, type ColumnMapping } from "./curves/parse";
 
 export interface OpCtx {
@@ -698,6 +700,7 @@ export const OPS = {
       return { message: "已新增管理員" };
     }),
   ),
+  ...STORE_ADMIN_OPS,
 };
 
 export type OpName = keyof typeof OPS;

@@ -47,6 +47,22 @@ export const C = {
   apiKeys: "apiKeys",
   stockCounts: "stockCounts",
   notifyLog: "notifyLog",
+  // ── 商城 ──
+  orderEvents: "orderEvents",
+  preorders: "preorderCampaigns",
+  promotions: "promotions",
+  redemptions: "promotionRedemptions",
+  paymentReports: "paymentReports",
+  orderAccess: "orderAccess",
+  orderCodes: "orderCodes",
+  shopCustomers: "shopCustomers",
+  shopCarts: "shopCarts",
+  identities: "customerIdentities",
+  loginTickets: "loginTickets",
+  oauthStates: "oauthStates",
+  content: "storeContent",
+  outbox: "notifyOutbox",
+  rateLimits: "rateLimits",
 } as const;
 
 export type InventoryKind = "GREEN" | "ROASTED" | "FINISHED" | "MATERIAL";

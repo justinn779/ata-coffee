@@ -46,7 +46,8 @@ export const DEFAULT_NOTIFY: NotifySettings = {
 };
 
 export const SECRETS_COL = "secrets";
-export const SITE_URL = (process.env.SITE_URL || "https://justinn779.github.io/ata-coffee").replace(/\/$/, "");
+// 模擬器（本機預覽）時連結指向本機靜態網站
+export const SITE_URL = (process.env.SITE_URL || (process.env.FUNCTIONS_EMULATOR === "true" ? "http://127.0.0.1:4173/ata-coffee" : "https://justinn779.github.io/ata-coffee")).replace(/\/$/, "");
 
 export interface NotifyCtx {
   db: Firestore;
