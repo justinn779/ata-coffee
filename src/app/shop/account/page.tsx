@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { signOut } from "firebase/auth";
 import { ChevronRight, X } from "lucide-react";
 import { shopFb } from "@/lib/firebase-lite";
@@ -37,6 +37,7 @@ export default function AccountPage() {
   const [form, setForm] = useState({ name: "", phone: "", contactEmail: "" });
   const [err, setErr] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const loggingOut = useRef(false);
 
   const load = useCallback(async () => {
     const [me, os] = await Promise.all([shopCall<{ profile: Profile }>("account.me"), shopCall<{ orders: OrderRow[] }>("account.orders")]);
@@ -49,7 +50,9 @@ export default function AccountPage() {
   }, []);
   useEffect(() => {
     if (!authReady) return;
-    if (!user) router.replace("/shop/login/?return=/shop/account/");
+    if (!user) {
+      if (!loggingOut.current) router.replace("/shop/login/?return=/shop/account/");
+    }
     else load().catch((e) => toast(e.message));
   }, [authReady, user, router, load, toast]);
 
@@ -82,8 +85,10 @@ export default function AccountPage() {
             type="button"
             className="min-h-11 text-[14px] underline underline-offset-4"
             onClick={async () => {
-              await signOut(shopFb().auth);
+              // 先離開會員頁，避免登出後被導到登入頁
+              loggingOut.current = true;
               router.replace("/shop/");
+              await signOut(shopFb().auth);
             }}
           >
             登出
