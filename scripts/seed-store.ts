@@ -6,6 +6,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { runShopOp, type ShopCtx } from "../functions/src/shop/ops";
 import { C } from "../functions/src/types";
+import { POLICY_DRAFTS } from "./policy-drafts";
 
 type Op = <T = { id: string }>(name: string, input: unknown) => Promise<T>;
 const SITE = "http://127.0.0.1:4173/ata-coffee";
@@ -98,11 +99,9 @@ export async function seedStore(db: Firestore, op: Op, ids: { coffees: Array<{ i
   await content({ type: "EVENT", order: 4, draft: { title: "冬日禮盒（示範活動）", text: "自選三入，送給重要的人", imageDesktop: img("event"), imageMobile: img("event-mobile"), imageAlt: "冬日禮盒活動（示範）", link: "/shop/p/?s=gift-box-3", startAt: null, endAt: null } });
   const page = (key: string, title: string, body: string) => content({ type: "PAGE", key, order: 100, draft: { title, body } });
   await page("story", "品牌故事", `用一杯咖啡，開啟每段獨特體驗。\n\nATA Coffee 相信每一杯咖啡都是一段旅程的開始。\n\n${DEMO}`);
-  await page("guide", "購物須知", `付款：銀行轉帳，請於下單後 72 小時內完成並回報帳號末五碼，逾期訂單會自動取消。\n配送：7-ELEVEN、全家超商取貨。\n出貨：付款確認後約 2 個工作天出貨；含預購商品的訂單會在預購商品到貨後一起出貨。\n研磨：咖啡豆可選原豆或免費代客研磨。\n\n${DEMO}`);
-  await page("returns", "退換貨", `退換貨政策需依消費者保護法與「通訊交易解除權合理例外情事適用準則」由商家確認後填寫。\n\n${DEMO}`);
-  await page("privacy", "隱私權政策", `本頁需由商家依個人資料保護法確認蒐集目的、類別、利用期間、地區、對象與方式，以及當事人權利後填寫。\n\n${DEMO}`);
-  await page("terms", "服務條款", `本頁需由商家確認後填寫。\n\n${DEMO}`);
-  await page("contact", "聯絡我們", `有任何問題，歡迎與我們聯絡。\n\n${DEMO}`);
+  for (const k of ["guide", "returns", "privacy", "terms", "contact"]) await page(k, POLICY_DRAFTS[k].title, `${POLICY_DRAFTS[k].body}
+
+（草稿：【請確認】處需商家確認後修改）`);
 
   // 測試會員與商城訂單（未付款、待對帳、已付款、已出貨）
   const who = (uid: string | null, email?: string): ShopCtx["who"] => ({ uid, email: email ?? null, emailVerified: true });
